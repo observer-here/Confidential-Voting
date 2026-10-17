@@ -243,10 +243,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true)
       // creating proposal
-      console.log("Creating proposal...")
+      console.log("📝 Creating proposal...")
       const tx = await contract.createProposal(description)
       await tx.wait()
-      console.log("Proposal created")
+      console.log("✅ Proposal created")
       await loadProposals()
     } catch (error) {
       console.error("Error creating proposal:", error)
@@ -295,8 +295,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         throw new Error("FHE encrypt function not available")
       }
       const encryptedVote = await fheEncrypt(numericVote)
+      console.log("📤 Submitting encrypted vote to contract...")
       const tx = await contract.vote(proposalId, encryptedVote.encryptedValue, encryptedVote.proof)
       await tx.wait()
+      console.log("✅ Vote stored encrypted. Coprocessor updated Yes/No tallies under FHE.")
 
       // Refresh proposals
       await loadProposals()
@@ -335,6 +337,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         throw new Error("Vote counts are already public")
       }
 
+      console.log("📣 Making tallies public (FHE.allowPublic)...")
       const tx = await contract.makeVoteCountsPublic(proposalId)
       await tx.wait()
 
@@ -342,6 +345,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         const [encryptedYes, encryptedNo] = await contract.getEncryptedVoteCount(proposalId)
         const yesResult = await decryptForTx(encryptedYes)
         const noResult = await decryptForTx(encryptedNo)
+        console.log("📤 Publishing Teecryptor-signed counts on-chain...")
         const revealTx = await contract.revealVoteCounts(
           proposalId,
           yesResult.decryptedValue,
@@ -350,6 +354,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           noResult.signature
         )
         await revealTx.wait()
+        console.log("✅ Vote counts revealed")
       }
 
       await loadProposals()
@@ -396,8 +401,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
     try {
       const encryptedVote = await contract.getMyVote(proposalId)
-      // ciphertext of caller's ballot
-      console.log("Encrypted vote:")
+      // ciphertext of caller's vote
+      console.log("🔒 Encrypted vote handle:")
       console.log(encryptedVote)
       return encryptedVote
     } catch (error: any) {

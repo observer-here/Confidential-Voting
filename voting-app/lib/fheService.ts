@@ -2,7 +2,7 @@
 
 import { ethers } from "ethers";
 import { createCofheConfig, createCofheClient } from "@cofhe/sdk/web";
-import { Encryptable, FheTypes, isCofheError, type CofheClient } from "@cofhe/sdk";
+import { Encryptable, EncryptStep, FheTypes, isCofheError, type CofheClient } from "@cofhe/sdk";
 import { chains } from "@cofhe/sdk/chains";
 import { Ethers6Adapter } from "@cofhe/sdk/adapters";
 import { CONFIDENTIAL_VOTING_ADDRESS } from "./contracts";
@@ -29,6 +29,33 @@ export const VOTE_OPTIONS = {
   NO: 1,
 } as const;
 
+const ENCRYPT_STEP_LOG: Record<EncryptStep, string> = {
+  [EncryptStep.InitTfhe]: "🔧 Init TFHE runtime",
+  [EncryptStep.FetchKeys]: "🔑 Fetch Fhenix FHE public keys",
+  [EncryptStep.Pack]: "📦 Pack encrypted Yes/No input",
+  [EncryptStep.Prove]: "🧮 Generate ZK proof of encryption",
+  [EncryptStep.Verify]: "🛰️ CoFHE coprocessor verifying ciphertext",
+};
+
+function logEncryptStep(step: EncryptStep, ctx?: { isStart?: boolean; isEnd?: boolean; duration?: number }) {
+  const label = ENCRYPT_STEP_LOG[step] ?? step;
+  if (ctx?.isStart) console.log(`${label}...`);
+  if (ctx?.isEnd) console.log(`✅ ${label}${ctx.duration ? ` (${ctx.duration}ms)` : ""}`);
+}
+
+function logDecryptPoll(ctx: {
+  operation: string;
+  requestId: string;
+  attemptIndex: number;
+  elapsedMs: number;
+}) {
+  const node = ctx.operation === "sealoutput" ? "Teecryptor sealoutput" : "Teecryptor decrypt";
+  console.log(
+    `⏳ Fhenix ${node} processing... attempt ${ctx.attemptIndex + 1}` +
+      `${ctx.requestId ? ` [${ctx.requestId.slice(0, 10)}…]` : ""} (${ctx.elapsedMs}ms)`
+  );
+}
+
 function toCtHash(value: unknown): `0x${string}` {
   if (typeof value === "bigint") {
     return `0x${value.toString(16).padStart(64, "0")}` as `0x${string}`;
@@ -53,13 +80,13 @@ class FHEService {
   preload(): void {
     if (typeof window === "undefined" || this.client) return;
     // initializing CoFHE SDK on dapp open
-    console.log("Initializing CoFHE SDK...");
+    console.log("🚀 Initializing CoFHE SDK...");
     this.client = createCofheClient(
       createCofheConfig({ supportedChains: [chains.sepolia] })
     );
     this.sdkLoaded = true;
     // sdk ready
-    console.log("CoFHE SDK loaded");
+    console.log("✅ CoFHE SDK loaded");
   }
 
   private getClient(): CofheClient {
@@ -84,8 +111,12 @@ class FHEService {
       const provider = new ethers.BrowserProvider(config.provider!);
       const signer = await provider.getSigner(config.account);
       const { publicClient, walletClient } = await Ethers6Adapter(provider, signer);
+      console.log("🔗 Connecting CoFHE client to wallet...");
       await client.connect(publicClient, walletClient);
+      // ACP is the EIP-712 permission Teecryptor checks against on-chain ACL
+      console.log("🪪 Creating or loading self ACP...");
       await client.acp.getOrCreateSelfACP();
+      console.log("✅ CoFHE connected + ACP ready");
       this.account = config.account!.toLowerCase();
       return client;
     })();
@@ -102,18 +133,21 @@ class FHEService {
 
   async encrypt(value: number, config: FHEConfig): Promise<EncryptedVote> {
     const client = await this.connect(config);
-    // encrypting yes/no ballot
-    console.log("Encrypting vote...");
+    // encrypting yes/no on the client, then CoFHE verifies the ZK proof
+    console.log("🔐 Encrypting vote on Fhenix CoFHE...");
     try {
       const [encryptedValue, proof] = await client
         .encryptInputs([Encryptable.uint8(BigInt(value))])
         .setConsumingContract(CONFIDENTIAL_VOTING_ADDRESS as `0x${string}`)
+        .onStep((step, ctx) => logEncryptStep(step, ctx))
         .execute();
-      // ciphertext
+      // ciphertext handle (not plaintext Yes/No)
+      console.log("🔒 Ciphertext handle:");
       console.log(encryptedValue);
+      console.log("🧾 Input proof ready for coprocessor");
       return { encryptedValue, proof };
     } catch (error: any) {
-      console.error("Encryption failed:", error);
+      console.error("❌ Encryption failed:", error);
       throw new Error(`Encryption failed: ${error?.message || "Unknown error"}`);
     }
   }
@@ -126,17 +160,26 @@ class FHEService {
       return cached.value;
     }
 
-    // decrypting ciphertext
-    console.log("Decrypting...");
+    // decryptForView: Teecryptor ACL check + TEE decrypt, sealed to ACP, unsealed locally
+    console.log("🔓 Decrypting for view (no on-chain tx)...");
+    console.log("🔒 Ciphertext handle:");
     console.log(handle);
+    console.log("🛰️ Sending to Fhenix Teecryptor...");
+    console.log("   1. Check on-chain ACL (FHE.allowSender)");
+    console.log("   2. Check ciphertext commitment");
+    console.log("   3. Decrypt inside TEE, seal to ACP key");
     try {
-      const result = await client.decryptForView(handle, FheTypes.Uint8).execute();
+      const result = await client
+        .decryptForView(handle, FheTypes.Uint8)
+        .onPoll((ctx) => logDecryptPoll(ctx))
+        .execute();
       const numericValue = Number(result);
-      console.log("Decrypted:", numericValue);
+      console.log("📬 Unsealing with local ACP key...");
+      console.log("✅ Decrypted:", numericValue);
       this.decryptCache.set(handle, { value: numericValue, timestamp: Date.now() });
       return numericValue;
     } catch (error: any) {
-      console.error("Decryption failed:", error);
+      console.error("❌ Decryption failed:", error);
       throw new Error(`Decryption failed: ${error?.message || "Unknown error"}`);
     }
   }
@@ -144,20 +187,31 @@ class FHEService {
   async decryptForTx(encryptedValue: unknown, config: FHEConfig): Promise<DecryptTxResult> {
     const client = await this.connect(config);
     const handle = toCtHash(encryptedValue);
-    // decrypting ciphertext for on-chain reveal
-    console.log("Decrypting...");
+    // decryptForTx: Teecryptor returns plaintext + enclave signature for publishDecryptResult
+    console.log("🔓 Decrypting for tx (Teecryptor signed result)...");
+    console.log("🔒 Ciphertext handle:");
     console.log(handle);
+    console.log("🛰️ Sending to Fhenix Teecryptor...");
+    console.log("   1. Check public ACL (FHE.allowPublic)");
+    console.log("   2. Fetch ciphertext + verify commitment");
+    console.log("   3. Decrypt in TEE and sign result");
     try {
-      const result = await client.decryptForTx(handle).withoutACP().execute();
+      const result = await client
+        .decryptForTx(handle)
+        .withoutACP()
+        .onPoll((ctx) => logDecryptPoll(ctx))
+        .execute();
       const payload = {
         ctHash: toCtHash(result.ctHash),
         decryptedValue: result.decryptedValue,
         signature: result.signature,
       };
-      console.log("Decrypted:", payload.decryptedValue.toString());
+      console.log("✅ Decrypted:", payload.decryptedValue.toString());
+      console.log("✍️ Teecryptor signature:");
+      console.log(payload.signature);
       return payload;
     } catch (error: any) {
-      console.error("Decryption failed:", error);
+      console.error("❌ Decryption failed:", error);
       throw new Error(`Decrypt-for-tx failed: ${error?.message || "Unknown error"}`);
     }
   }
