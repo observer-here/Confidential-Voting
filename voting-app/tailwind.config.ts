@@ -12,6 +12,10 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ["var(--font-sans)", "ui-sans-serif", "system-ui"],
+  			serif: ["var(--font-serif)", "ui-serif", "Georgia"],
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
