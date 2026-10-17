@@ -495,7 +495,7 @@ For issues or questions:
 | 🎓 Learn | [learn.fhenix.io](https://learn.fhenix.io/) |
 | ✍️ Blog | [fhenix.io/blog](https://www.fhenix.io/blog) |
 | 💻 GitHub | [github.com/FhenixProtocol](https://github.com/FhenixProtocol) |
-| 🐦 X | [@FhenixIO](https://x.com/FhenixIO) |
+| 🐦 X | [@FhenixIO](https://x.com/Fhenix) |
 | 💬 Discord | [discord.com/invite/FuVgxrvJMY](https://discord.com/invite/FuVgxrvJMY) |
 | ✈️ Telegram | [t.me/+OEO4CItQYh8xYzNh](https://t.me/+OEO4CItQYh8xYzNh) |
 
