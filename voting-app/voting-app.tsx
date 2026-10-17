@@ -6,6 +6,9 @@ import { useWeb3 } from "@/contexts/web3-context"
 import { WalletConnect } from "@/components/wallet-connect"
 import { MobileNav, TABS } from "@/components/mobile-nav"
 import { Magnetic } from "@/components/magnetic"
+import { MountainBg } from "@/components/mountain-bg"
+import { SiteFooter } from "@/components/site-footer"
+import { Landing } from "@/components/landing"
 import { Shield, Lock, Check, X, BarChart3, Loader2, RefreshCw, LogOut } from "lucide-react"
 
 interface UserVote {
@@ -16,28 +19,6 @@ interface UserVote {
 
 const TITLE = "font-[family-name:var(--font-serif)] text-[28px] leading-none md:text-[32px]"
 const PRIMARY_BTN = "rounded-xl bg-[#c5d9c2] px-4 py-2.5 text-sm font-medium text-[#121614] hover:bg-[#d5e6d2] disabled:opacity-40"
-
-function MountainBg() {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[50%] overflow-hidden">
-      <div className="cv-grid absolute inset-0" />
-      <svg
-        viewBox="0 0 1200 420"
-        className="absolute bottom-0 right-0 h-full w-full opacity-40 md:w-[72%] md:opacity-70"
-        preserveAspectRatio="xMaxYMax meet"
-      >
-        <defs>
-          <pattern id="dots" width="6" height="6" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.7" fill="#9cbc9a" />
-          </pattern>
-        </defs>
-        <path d="M0 420 L180 250 L280 310 L420 140 L540 250 L680 90 L820 220 L960 70 L1100 200 L1200 120 L1200 420 Z" fill="url(#dots)" opacity="0.35" />
-        <path d="M220 420 L380 280 L500 340 L640 190 L790 300 L920 160 L1080 280 L1200 210 L1200 420 Z" fill="url(#dots)" opacity="0.55" />
-        <circle cx="980" cy="118" r="26" fill="none" stroke="#9cbc9a" strokeWidth="2" opacity="0.45" />
-      </svg>
-    </div>
-  )
-}
 
 export default function Component() {
   const {
@@ -197,6 +178,8 @@ export default function Component() {
 
   const cofheState = fheStatus.error ? "Error" : fheStatus.initialized ? "Ready" : "Initializing"
 
+  if (!isConnected) return <Landing />
+
   return (
     <div className="relative flex min-h-[100dvh] bg-[#090b0a] text-[#e7ece8]">
       {/* desktop sidebar */}
@@ -209,29 +192,27 @@ export default function Component() {
           </div>
         </div>
 
-        {isConnected && (
-          <nav className="flex flex-col gap-1">
-            {TABS.filter((t) => t.id !== "account").map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ${
-                  activeTab === id ? "bg-[#1c241e] text-[#d7e6d4]" : "text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </nav>
-        )}
+        <nav className="flex flex-col gap-1">
+          {TABS.filter((t) => t.id !== "account").map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ${
+                activeTab === id ? "bg-[#1c241e] text-[#d7e6d4]" : "text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </nav>
 
         <div className="mt-auto space-y-3 px-1">
           <div className="flex items-center gap-2 text-xs text-zinc-400">
             <span className={`h-1.5 w-1.5 rounded-full ${isCorrectNetwork ? "bg-[#8fbf88]" : "bg-red-500"}`} />
             {isCorrectNetwork ? "Sepolia" : "Wrong network"}
           </div>
-          {isConnected && account && (
+          {account && (
             <div className="flex items-center justify-between text-xs text-zinc-500">
               <span>{formatAddress(account)}</span>
               <button onClick={refreshProposals} className="rounded p-1 hover:text-zinc-200" title="Refresh">
@@ -262,7 +243,7 @@ export default function Component() {
           <WalletConnect />
         </header>
 
-        {isConnected && !isCorrectNetwork && (
+        {!isCorrectNetwork && (
           <div className="relative z-10 flex items-center justify-between gap-3 border-b border-red-500/20 bg-red-950/40 px-4 py-2 text-sm md:px-8">
             <span>Sepolia only.</span>
             <button onClick={switchToSepolia} className="rounded-full bg-[#c5d9c2] px-3 py-1 text-xs text-[#121614]">
@@ -282,17 +263,7 @@ export default function Component() {
         )}
 
         <main className="relative z-10 flex-1 px-4 py-6 md:px-8 md:py-8">
-          {!isConnected ? (
-            <div className="pt-10 md:pt-16">
-              <h1 className="font-[family-name:var(--font-serif)] text-4xl leading-tight">Connect to vote privately</h1>
-              <p className="mt-3 max-w-md text-zinc-500">Your Yes/No is encrypted with Fhenix CoFHE before it hits the chain.</p>
-              <div className="mt-6">
-                <Magnetic>
-                  <WalletConnect />
-                </Magnetic>
-              </div>
-            </div>
-          ) : activeTab === "vote" ? (
+          {activeTab === "vote" ? (
             <>
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
@@ -557,24 +528,11 @@ export default function Component() {
           )}
         </main>
 
-        <footer
-          className={`relative z-10 space-y-1.5 border-t border-white/[0.06] px-4 pt-6 text-center text-xs text-zinc-500 md:pb-6 ${
-            isConnected ? "pb-24" : "pb-6"
-          }`}
-        >
-          <p>© 2026 Confidential Voting. All rights reserved.</p>
-          <p>Powered by Fhenix CoFHE · Fully Homomorphic Encryption on Sepolia</p>
-          <p>
-            Built by Observer ·{" "}
-            <a href="https://x.com/0bserver_here" target="_blank" rel="noreferrer" className="text-zinc-300 hover:text-[#c5d9c2]">
-              @0bserver_here
-            </a>
-          </p>
-        </footer>
+        <SiteFooter className="pb-24" />
       </div>
 
       {/* mobile fixed bottom bar */}
-      {isConnected && <MobileNav active={activeTab} onChange={setActiveTab} />}
+      <MobileNav active={activeTab} onChange={setActiveTab} />
     </div>
   )
 }
