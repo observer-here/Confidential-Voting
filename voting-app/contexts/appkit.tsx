@@ -49,7 +49,7 @@ if (typeof window !== "undefined" && !(window as any).__cvAppKit) {
     },
     themeMode: "dark",
     themeVariables: {
-      "--w3m-accent": "#7c3aed",
+      "--w3m-accent": "#9cbc9a",
     },
   })
 }

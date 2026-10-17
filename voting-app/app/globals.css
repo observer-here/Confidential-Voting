@@ -2,38 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  min-height: 100%;
+  background: #090b0a;
+  color: #e7ece8;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
 @layer base {
   :root {
-    --background: 150 8% 6%;
-    --foreground: 140 10% 90%;
-    --card: 150 8% 8%;
-    --card-foreground: 140 10% 90%;
-    --popover: 150 8% 8%;
-    --popover-foreground: 140 10% 90%;
-    --primary: 138 55% 62%;
+    --background: 150 8% 4%;
+    --foreground: 140 12% 92%;
+    --card: 150 8% 6%;
+    --card-foreground: 140 12% 92%;
+    --popover: 150 8% 6%;
+    --popover-foreground: 140 12% 92%;
+    --primary: 142 28% 72%;
     --primary-foreground: 150 20% 8%;
-    --secondary: 150 8% 12%;
-    --secondary-foreground: 140 10% 90%;
-    --muted: 150 6% 14%;
-    --muted-foreground: 140 6% 55%;
-    --accent: 138 30% 16%;
-    --accent-foreground: 138 55% 72%;
-    --destructive: 0 62% 45%;
+    --secondary: 150 6% 12%;
+    --secondary-foreground: 140 12% 92%;
+    --muted: 150 6% 12%;
+    --muted-foreground: 140 6% 58%;
+    --accent: 142 18% 16%;
+    --accent-foreground: 142 28% 78%;
+    --destructive: 0 62% 42%;
     --destructive-foreground: 0 0% 98%;
-    --border: 150 6% 16%;
-    --input: 150 6% 16%;
-    --ring: 138 55% 62%;
+    --border: 150 8% 14%;
+    --input: 150 8% 14%;
+    --ring: 142 28% 72%;
     --radius: 0.75rem;
   }
   * {
     @apply border-border;
   }
-  html,
   body {
-    @apply bg-[#0b0d0c] text-zinc-200 antialiased;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
-.serif-title {
-  font-family: var(--font-serif), serif;
+.cv-grid {
+  background-image:
+    linear-gradient(rgba(180, 214, 186, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(180, 214, 186, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to top, black 20%, transparent 85%);
 }

@@ -1,30 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { useWeb3 } from "@/contexts/web3-context"
 import { WalletConnect } from "@/components/wallet-connect"
-import {
-  Eye,
-  Plus,
-  Shield,
-  Lock,
-  Users,
-  CheckCircle,
-  XCircle,
-  Vote,
-  BarChart3,
-  History,
-  TrendingUp,
-  Loader2,
-  RefreshCw,
-} from "lucide-react"
+import { MobileNav, TABS } from "@/components/mobile-nav"
+import { Magnetic } from "@/components/magnetic"
+import { Shield, Lock, Check, X, BarChart3, Loader2, RefreshCw, LogOut } from "lucide-react"
 
 interface UserVote {
   proposalId: number
@@ -32,12 +14,36 @@ interface UserVote {
   votedAt: Date
 }
 
+const TITLE = "font-[family-name:var(--font-serif)] text-[28px] leading-none md:text-[32px]"
+const PRIMARY_BTN = "rounded-xl bg-[#c5d9c2] px-4 py-2.5 text-sm font-medium text-[#121614] hover:bg-[#d5e6d2] disabled:opacity-40"
+
+function MountainBg() {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[50%] overflow-hidden">
+      <div className="cv-grid absolute inset-0" />
+      <svg
+        viewBox="0 0 1200 420"
+        className="absolute bottom-0 right-0 h-full w-full opacity-40 md:w-[72%] md:opacity-70"
+        preserveAspectRatio="xMaxYMax meet"
+      >
+        <defs>
+          <pattern id="dots" width="6" height="6" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.7" fill="#9cbc9a" />
+          </pattern>
+        </defs>
+        <path d="M0 420 L180 250 L280 310 L420 140 L540 250 L680 90 L820 220 L960 70 L1100 200 L1200 120 L1200 420 Z" fill="url(#dots)" opacity="0.35" />
+        <path d="M220 420 L380 280 L500 340 L640 190 L790 300 L920 160 L1080 280 L1200 210 L1200 420 Z" fill="url(#dots)" opacity="0.55" />
+        <circle cx="980" cy="118" r="26" fill="none" stroke="#9cbc9a" strokeWidth="2" opacity="0.45" />
+      </svg>
+    </div>
+  )
+}
+
 export default function Component() {
   const {
     account,
     isConnected,
     isCorrectNetwork,
-    networkName,
     proposals,
     isLoading,
     fheStatus,
@@ -46,13 +52,11 @@ export default function Component() {
     makeVoteCountsPublic,
     hasUserVoted,
     getMyVote,
-    getPublicVoteCounts,
-    decryptVoteCounts,
     refreshProposals,
     switchToSepolia,
+    disconnectWallet,
     isProposalOwner,
-    fheDecrypt,
-    fheUserDecrypt
+    fheUserDecrypt,
   } = useWeb3()
 
   const { toast } = useToast()
@@ -62,184 +66,101 @@ export default function Component() {
   const [votingStates, setVotingStates] = useState<Record<number, string>>({})
   const [creatingProposal, setCreatingProposal] = useState(false)
   const [proposalOwnership, setProposalOwnership] = useState<Record<number, boolean>>({})
-  
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-  const [proposalsPerPage] = useState(3) // Show 3 proposals per page
+  const proposalsPerPage = 3
 
-  // Check voting status and ownership for all proposals
   useEffect(() => {
     if (isConnected && proposals.length > 0 && fheStatus.initialized) {
-      // Only check for proposals we don't already have votes for
-      const proposalsToCheck = proposals.filter(proposal => 
-        !userVotes.some(vote => vote.proposalId === proposal.id)
-      )
-      
-      if (proposalsToCheck.length > 0) {
-        checkVotingStatus()
-      }
-
-      // Check ownership for all proposals
+      const proposalsToCheck = proposals.filter((proposal) => !userVotes.some((vote) => vote.proposalId === proposal.id))
+      if (proposalsToCheck.length > 0) checkVotingStatus()
       checkProposalOwnership()
     }
   }, [isConnected, proposals, fheStatus.initialized])
 
-  // Clear user votes and ownership when wallet disconnects
   useEffect(() => {
     if (!isConnected) {
       setUserVotes([])
       setVotingStates({})
       setProposalOwnership({})
+      setActiveTab("vote")
     }
   }, [isConnected])
 
-  // Reset pagination when proposals change
   useEffect(() => {
     setCurrentPage(1)
   }, [proposals.length])
 
+  // switching tabs on a phone should start at the top
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [activeTab, currentPage])
+
   const checkProposalOwnership = async () => {
     const ownership: Record<number, boolean> = {}
-    
-    try {
-      for (const proposal of proposals) {
-        try {
-          const isOwner = await isProposalOwner(proposal.id)
-          ownership[proposal.id] = isOwner
-        } catch (error) {
-          console.error(`Error checking ownership for proposal ${proposal.id}:`, error)
-          ownership[proposal.id] = false
-        }
+    for (const proposal of proposals) {
+      try {
+        ownership[proposal.id] = await isProposalOwner(proposal.id)
+      } catch {
+        ownership[proposal.id] = false
       }
-      setProposalOwnership(ownership)
-    } catch (error) {
-      console.error('Error checking proposal ownership:', error)
     }
+    setProposalOwnership(ownership)
   }
 
   const checkVotingStatus = async () => {
     const votes: UserVote[] = []
-    
-    try {
-      // First, find all proposals where user has voted
-      const votedProposals: number[] = []
-      for (const proposal of proposals) {
-        try {
-          const voted = await hasUserVoted(proposal.id)
-          if (voted) {
-            votedProposals.push(proposal.id)
-          }
-        } catch (error) {
-          console.error(`Error checking vote status for proposal ${proposal.id}:`, error)
-        }
-      }
-
-      if (votedProposals.length > 0) {
-        // Check if we already have these votes in local state
-        const existingVotes = userVotes.filter(vote => votedProposals.includes(vote.proposalId))
-        const newProposals = votedProposals.filter(id => !userVotes.some(vote => vote.proposalId === id))
-        
-        // Add existing votes (including votes we just made)
-        votes.push(...existingVotes)
-        
-        if (newProposals.length > 0) {
-          for (const proposalId of newProposals) {
-            try {
-              const encryptedVote = await getMyVote(proposalId)
-              
-              if (fheStatus.initialized && fheUserDecrypt) {
-                const decryptedVote = await fheUserDecrypt(encryptedVote)
-                const voteValue = decryptedVote === 0 ? "yes" : "no"
-                
-                votes.push({
-                  proposalId: proposalId,
-                  vote: voteValue,
-                  votedAt: new Date(),
-                })
-              } else {
-                votes.push({
-                  proposalId: proposalId,
-                  vote: "unknown",
-                  votedAt: new Date(),
-                })
-              }
-            } catch (error) {
-              console.error(`Error getting vote for proposal ${proposalId}:`, error)
-              votes.push({
-                proposalId: proposalId,
-                vote: "error",
-                votedAt: new Date(),
-              })
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error in checkVotingStatus:', error)
+    const votedProposals: number[] = []
+    for (const proposal of proposals) {
+      try {
+        if (await hasUserVoted(proposal.id)) votedProposals.push(proposal.id)
+      } catch {}
     }
-    
+    if (votedProposals.length > 0) {
+      votes.push(...userVotes.filter((vote) => votedProposals.includes(vote.proposalId)))
+      const newProposals = votedProposals.filter((id) => !userVotes.some((vote) => vote.proposalId === id))
+      for (const proposalId of newProposals) {
+        try {
+          const encryptedVote = await getMyVote(proposalId)
+          if (fheStatus.initialized && fheUserDecrypt) {
+            const decryptedVote = await fheUserDecrypt(encryptedVote)
+            votes.push({ proposalId, vote: decryptedVote === 0 ? "yes" : "no", votedAt: new Date() })
+          } else {
+            votes.push({ proposalId, vote: "unknown", votedAt: new Date() })
+          }
+        } catch {
+          votes.push({ proposalId, vote: "error", votedAt: new Date() })
+        }
+      }
+    }
     setUserVotes(votes)
   }
 
   const handleCreateProposal = async () => {
     if (!newProposal.trim()) return
-
     try {
       setCreatingProposal(true)
       await createProposal(newProposal.trim())
       setNewProposal("")
       setActiveTab("vote")
-      toast({
-        title: "Proposal Created",
-        description: "Your proposal has been successfully created on the blockchain.",
-      })
-    } catch (error) {
-      console.error("Error creating proposal:", error)
-      toast({
-        title: "Error",
-        description: "Failed to create proposal. Please try again.",
-        variant: "destructive",
-      })
+      toast({ title: "Proposal Created", description: "Your proposal is on-chain." })
+    } catch {
+      toast({ title: "Error", description: "Failed to create proposal.", variant: "destructive" })
     } finally {
       setCreatingProposal(false)
     }
   }
 
   const handleVote = async (proposalId: number, voteValue: "yes" | "no") => {
-    // Set loading state immediately
-    setVotingStates((prev) => ({ ...prev, [proposalId]: "Preparing..." }))
-    
+    setVotingStates((prev) => ({ ...prev, [proposalId]: "Encrypting..." }))
     try {
-      setVotingStates((prev) => ({ ...prev, [proposalId]: "Encrypting..." }))
-
       await vote(proposalId, voteValue === "yes")
-      
-      // Update loading text to show submission step
-      setVotingStates((prev) => ({ ...prev, [proposalId]: "Submitting..." }))
-
-      // Update loading text to show confirmation step
-      setVotingStates((prev) => ({ ...prev, [proposalId]: "Confirming..." }))
-
-      // Add vote to local state immediately (we know what user voted)
-      const newVote: UserVote = {
-        proposalId,
-        vote: voteValue,
-        votedAt: new Date(),
-      }
-      setUserVotes((prev) => [...prev.filter((v) => v.proposalId !== proposalId), newVote])
-
-      toast({
-        title: "Vote Submitted",
-        description: `Your ${voteValue} vote has been recorded on the blockchain.`,
-      })
-      
-      // Refresh proposals to get updated vote counts
+      setUserVotes((prev) => [...prev.filter((v) => v.proposalId !== proposalId), { proposalId, vote: voteValue, votedAt: new Date() }])
+      toast({ title: "Vote Submitted", description: `Your ${voteValue} vote is encrypted on-chain.` })
       await refreshProposals()
     } catch (error) {
-      console.error("Error voting:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit vote. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to submit vote.",
         variant: "destructive",
       })
     } finally {
@@ -250,804 +171,410 @@ export default function Component() {
   const handleMakePublic = async (proposalId: number) => {
     try {
       await makeVoteCountsPublic(proposalId)
-      toast({
-        title: "Results Made Public",
-        description: "Vote counts are now visible to everyone.",
-      })
-    } catch (error) {
-      console.error("Error making results public:", error)
-      toast({
-        title: "Error",
-        description: "Failed to make results public. Please try again.",
-        variant: "destructive",
-      })
+      toast({ title: "Proposal Closed", description: "Results are published." })
+    } catch {
+      toast({ title: "Error", description: "Failed to publish and close.", variant: "destructive" })
     }
   }
 
-  const hasUserVotedOnProposal = (proposalId: number) => {
-    return userVotes.some((vote) => vote.proposalId === proposalId)
-  }
+  const hasUserVotedOnProposal = (proposalId: number) => userVotes.some((vote) => vote.proposalId === proposalId)
+  const getUserVote = (proposalId: number) => userVotes.find((vote) => vote.proposalId === proposalId)
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+  const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`
 
-  const getUserVote = (proposalId: number) => {
-    return userVotes.find((vote) => vote.proposalId === proposalId)
-  }
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-  // Pagination logic
-  const indexOfLastProposal = currentPage * proposalsPerPage
-  const indexOfFirstProposal = indexOfLastProposal - proposalsPerPage
-  const currentProposals = proposals.slice(indexOfFirstProposal, indexOfLastProposal)
+  const currentProposals = proposals.slice((currentPage - 1) * proposalsPerPage, currentPage * proposalsPerPage)
   const totalPages = Math.ceil(proposals.length / proposalsPerPage)
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page)
-    // Scroll to top when changing page
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   const totalVotes = proposals.reduce((acc, p) => acc + p.yesCount + p.noCount, 0)
-  const totalProposals = proposals.length
-  const userVoteCount = userVotes.length
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        {/* Animated background elements */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        </div>
+  const voteDisabled = (proposal: (typeof proposals)[0]) =>
+    !!votingStates[proposal.id] ||
+    isLoading ||
+    fheStatus.loading ||
+    !fheStatus.initialized ||
+    hasUserVotedOnProposal(proposal.id) ||
+    proposal.isPublic
 
-        {/* Header */}
-        <header className="relative z-10 bg-slate-900/80 backdrop-blur-xl border-b border-purple-500/20">
-          <div className="max-w-6xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg">
-                  <Shield className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                    Confidential Voting
-                  </h1>
-                  <p className="text-xs text-slate-400 flex items-center gap-1">
-                    <Lock className="h-3 w-3" />
-                    Zero-knowledge privacy guaranteed
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Main Content */}
-        <main className="pt-12 pb-12 relative z-10">
-          <div className="max-w-4xl mx-auto px-6">
-            <WalletConnect />
-          </div>
-        </main>
-      </div>
-    )
-  }
+  const cofheState = fheStatus.error ? "Error" : fheStatus.initialized ? "Ready" : "Initializing"
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Animated background elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-      </div>
-
-      {/* FHE Loading Overlay */}
-      {fheStatus.loading && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-slate-800/90 border border-slate-700/50 rounded-xl p-8 text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Initializing CoFHE</h3>
-            <p className="text-slate-400">Loading confidential voting system...</p>
+    <div className="relative flex min-h-[100dvh] bg-[#090b0a] text-[#e7ece8]">
+      {/* desktop sidebar */}
+      <aside className="relative z-20 hidden w-[250px] shrink-0 flex-col border-r border-white/[0.06] px-4 py-5 md:flex">
+        <div className="mb-8 flex items-start justify-center gap-2.5 px-1">
+          <Shield className="mt-0.5 h-5 w-5 text-[#b7d0b4]" />
+          <div className="text-center">
+            <div className="font-[family-name:var(--font-serif)] whitespace-nowrap text-[22px] leading-6 tracking-tight">Confidential Voting</div>
+            <p className="mt-3 text-[11px] leading-4 text-zinc-500">Every vote sealed.<br />Only the tally revealed.</p>
           </div>
         </div>
-      )}
 
-      {/* Fixed Header */}
-      <header className="fixed top-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-b border-purple-500/20 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg">
-                <Shield className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                  Confidential Voting
-                </h1>
-                <p className="text-xs text-slate-400 flex items-center gap-1">
-                  <Lock className="h-3 w-3" />
-                  Zero-knowledge privacy guaranteed
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              {/* FHE Loading Indicator */}
-              {fheStatus.loading && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full">
-                  <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-                  <span className="text-xs text-blue-400">Loading CoFHE...</span>
-                </div>
-              )}
-              {fheStatus.error && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-full">
-                  <XCircle className="h-3 w-3 text-red-400" />
-                  <span className="text-xs text-red-400">CoFHE Error</span>
-                </div>
-              )}
-              <div className="hidden sm:flex items-center gap-6 text-sm text-slate-400">
-                <div className="flex items-center gap-1">
-                  <Users className="h-4 w-4" />
-                  <span>{totalVotes} votes</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Vote className="h-4 w-4" />
-                  <span>{totalProposals} proposals</span>
-                </div>
-              </div>
-              
-              {/* Network Status */}
-              {isConnected && (
-                <div className="flex items-center gap-2">
-                  {isCorrectNetwork ? (
-                    <div className="flex items-center gap-1 px-2 py-1 bg-green-500/20 border border-green-500/30 rounded-md">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span className="text-xs text-green-400 font-medium">{networkName}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 px-2 py-1 bg-red-500/20 border border-red-500/30 rounded-md">
-                        <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-                        <span className="text-xs text-red-400 font-medium">Wrong Network</span>
-                      </div>
-                      <Button
-                        onClick={switchToSepolia}
-                        size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                      >
-                        Switch to Sepolia
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              <WalletConnect />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Network Warning Banner */}
-      {isConnected && !isCorrectNetwork && (
-        <div className="fixed top-16 left-0 right-0 bg-red-500/90 backdrop-blur-xl border-b border-red-400/30 z-10">
-          <div className="max-w-6xl mx-auto px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                <span className="text-white font-medium">
-                  Wrong Network: This app only supports {networkName} network
-                </span>
-              </div>
-              <Button
-                onClick={switchToSepolia}
-                size="sm"
-                className="bg-white text-red-600 hover:bg-gray-100 font-medium"
+        {isConnected && (
+          <nav className="flex flex-col gap-1">
+            {TABS.filter((t) => t.id !== "account").map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ${
+                  activeTab === id ? "bg-[#1c241e] text-[#d7e6d4]" : "text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300"
+                }`}
               >
-                Switch to Sepolia
-              </Button>
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+
+        <div className="mt-auto space-y-3 px-1">
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <span className={`h-1.5 w-1.5 rounded-full ${isCorrectNetwork ? "bg-[#8fbf88]" : "bg-red-500"}`} />
+            {isCorrectNetwork ? "Sepolia" : "Wrong network"}
+          </div>
+          {isConnected && account && (
+            <div className="flex items-center justify-between text-xs text-zinc-500">
+              <span>{formatAddress(account)}</span>
+              <button onClick={refreshProposals} className="rounded p-1 hover:text-zinc-200" title="Refresh">
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <MountainBg />
+
+        {/* mobile top bar */}
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.06] bg-[#090b0a]/85 px-4 py-3 backdrop-blur-xl md:hidden">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-[#b7d0b4]" />
+            <span className="font-[family-name:var(--font-serif)] text-lg">Confidential Voting</span>
+          </div>
+          <WalletConnect />
+        </header>
+
+        {/* desktop top bar */}
+        <header className="relative z-10 hidden items-center justify-end gap-6 border-b border-white/[0.06] px-8 py-4 md:flex">
+          <p className="text-right text-[13px] leading-4 text-zinc-500">
+            Private today<br />for a fairer tomorrow.
+          </p>
+          <WalletConnect />
+        </header>
+
+        {isConnected && !isCorrectNetwork && (
+          <div className="relative z-10 flex items-center justify-between gap-3 border-b border-red-500/20 bg-red-950/40 px-4 py-2 text-sm md:px-8">
+            <span>Sepolia only.</span>
+            <button onClick={switchToSepolia} className="rounded-full bg-[#c5d9c2] px-3 py-1 text-xs text-[#121614]">
+              Switch to Sepolia
+            </button>
+          </div>
+        )}
+
+        {fheStatus.loading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090b0a]/80 backdrop-blur-sm">
+            <div className="text-center">
+              <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-[#b7d0b4]" />
+              <p className="font-[family-name:var(--font-serif)] text-xl">Initializing CoFHE</p>
+              <p className="mt-1 text-sm text-zinc-500">Loading confidential voting...</p>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Main Content */}
-      <main className={`relative z-10 ${isConnected && !isCorrectNetwork ? 'pt-32' : 'pt-24'} pb-12`}>
-        <div className="max-w-6xl mx-auto px-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex items-center justify-between mb-8">
-              <TabsList className="grid grid-cols-4 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 p-1 rounded-xl">
-                <TabsTrigger
-                  value="vote"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300 font-medium transition-all duration-200"
-                >
-                  <Vote className="h-4 w-4 mr-2" />
-                  Vote
-                </TabsTrigger>
-                <TabsTrigger
-                  value="create"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300 font-medium transition-all duration-200"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create
-                </TabsTrigger>
-                <TabsTrigger
-                  value="analytics"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300 font-medium transition-all duration-200"
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </TabsTrigger>
-                <TabsTrigger
-                  value="history"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300 font-medium transition-all duration-200"
-                >
-                  <History className="h-4 w-4 mr-2" />
-                  My Votes
-                </TabsTrigger>
-              </TabsList>
-
-              <Button
-                onClick={refreshProposals}
-                variant="ghost"
-                size="sm"
-                disabled={isLoading}
-                className="text-slate-400 hover:text-white hover:bg-slate-700/50"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </Button>
+        <main className="relative z-10 flex-1 px-4 py-6 md:px-8 md:py-8">
+          {!isConnected ? (
+            <div className="pt-10 md:pt-16">
+              <h1 className="font-[family-name:var(--font-serif)] text-4xl leading-tight">Connect to vote privately</h1>
+              <p className="mt-3 max-w-md text-zinc-500">Your Yes/No is encrypted with Fhenix CoFHE before it hits the chain.</p>
+              <div className="mt-6">
+                <Magnetic>
+                  <WalletConnect />
+                </Magnetic>
+              </div>
             </div>
-
-            {/* Vote Tab */}
-            <TabsContent value="vote" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white">Active Proposals</h2>
-                <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 border-slate-600">
-                  {proposals.length} proposals
-                </Badge>
+          ) : activeTab === "vote" ? (
+            <>
+              <div className="mb-6 flex items-end justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className={TITLE}>Active Proposals</h1>
+                    <span className="rounded-md bg-[#1c241e] px-1.5 py-0.5 text-[11px] text-[#b7d0b4]">{proposals.length}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-zinc-500">Cast a private vote. Results are revealed after voting ends.</p>
+                </div>
+                <div className="hidden md:block">
+                  <Magnetic>
+                    <button onClick={() => setActiveTab("create")} className={PRIMARY_BTN}>
+                      + New Proposal
+                    </button>
+                  </Magnetic>
+                </div>
               </div>
 
               {isLoading && proposals.length === 0 ? (
-                <Card className="bg-slate-800/30 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="py-16 text-center">
-                    <Loader2 className="h-8 w-8 text-slate-400 animate-spin mx-auto mb-4" />
-                    <p className="text-slate-400 text-lg">Loading proposals from blockchain...</p>
-                  </CardContent>
-                </Card>
+                <p className="py-16 text-center text-zinc-500">
+                  <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
+                  Loading proposals...
+                </p>
               ) : proposals.length === 0 ? (
-                <Card className="bg-slate-800/30 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="py-16 text-center">
-                    <div className="p-4 bg-slate-700/30 rounded-full w-fit mx-auto mb-4">
-                      <Vote className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-400 text-lg">No proposals yet. Create the first one!</p>
-                    <Button
-                      onClick={() => setActiveTab("create")}
-                      className="mt-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                    >
-                      Create Proposal
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-6">
-                  {currentProposals.map((proposal) => (
-                    <Card
-                      key={proposal.id}
-                      className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50 hover:border-purple-500/30 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10"
-                    >
-                      <CardHeader className="pb-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <CardTitle className="text-white text-lg leading-relaxed flex-1">
-                            {proposal.description}
-                          </CardTitle>
-                          <div className="flex items-center gap-2">
-                            {proposal.isPublic && (
-                              <Badge
-                                variant="secondary"
-                                className="bg-orange-500/20 text-orange-300 border-orange-500/30"
-                              >
-                                <Lock className="h-3 w-3 mr-1" />
-                                Voting Closed
-                              </Badge>
-                            )}
-                            <div className="text-xs text-slate-400 whitespace-nowrap">#{proposal.id}</div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-6">
-                        {/* Voting Buttons */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {proposal.isPublic && (
-                            <div className="col-span-full mb-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                              <div className="flex items-center gap-2 text-orange-300">
-                                <Lock className="h-4 w-4" />
-                                <span className="font-medium">Voting has been closed</span>
-                              </div>
-                              <p className="text-orange-200/80 text-sm mt-1">
-                                Results are now public. No more votes can be submitted for this proposal.
-                              </p>
-                            </div>
-                          )}
-                          <Button
-                            variant={getUserVote(proposal.id)?.vote === "yes" ? "default" : "outline"}
-                            onClick={() => handleVote(proposal.id, "yes")}
-                            disabled={
-                              !!votingStates[proposal.id] || 
-                              isLoading || 
-                              fheStatus.loading || 
-                              !fheStatus.initialized ||
-                              hasUserVotedOnProposal(proposal.id) ||
-                              proposal.isPublic
-                            }
-                            className={`h-12 font-medium transition-all duration-200 ${
-                              getUserVote(proposal.id)?.vote === "yes"
-                                ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
-                                : hasUserVotedOnProposal(proposal.id) || proposal.isPublic
-                                ? "bg-slate-600/30 border-slate-500 text-slate-400 cursor-not-allowed"
-                                : "bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-green-600/20 hover:border-green-500/50 hover:text-green-400"
-                            }`}
-                          >
-                            {votingStates[proposal.id] ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : fheStatus.loading ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                            )}
-                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading CoFHE..." : proposal.isPublic ? "Voting Closed" : "Vote Yes")}
-                          </Button>
-                          <Button
-                            variant={getUserVote(proposal.id)?.vote === "no" ? "destructive" : "outline"}
-                            onClick={() => handleVote(proposal.id, "no")}
-                            disabled={
-                              !!votingStates[proposal.id] || 
-                              isLoading || 
-                              fheStatus.loading || 
-                              !fheStatus.initialized ||
-                              hasUserVotedOnProposal(proposal.id) ||
-                              proposal.isPublic
-                            }
-                            className={`h-12 font-medium transition-all duration-200 ${
-                              getUserVote(proposal.id)?.vote === "no"
-                                ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white border-0"
-                                : hasUserVotedOnProposal(proposal.id) || proposal.isPublic
-                                ? "bg-slate-600/30 border-slate-500 text-slate-400 cursor-not-allowed"
-                                : "bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-red-600/20 hover:border-red-500/50 hover:text-red-400"
-                            }`}
-                          >
-                            {votingStates[proposal.id] ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : fheStatus.loading ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <XCircle className="h-4 w-4 mr-2" />
-                            )}
-                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading CoFHE..." : proposal.isPublic ? "Voting Closed" : "Vote No")}
-                          </Button>
-                        </div>
-
-                        {/* Make Results Public Button - Only for proposal owner */}
-                        {proposalOwnership[proposal.id] && !proposal.isPublic && (
-                          <Button
-                            variant="ghost"
-                            onClick={() => handleMakePublic(proposal.id)}
-                            disabled={isLoading}
-                            className="w-full h-10 bg-slate-700/20 hover:bg-slate-700/40 text-slate-300 hover:text-white border border-slate-600/50 hover:border-purple-500/50 transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Make Results Public
-                          </Button>
-                        )}
-
-                        {/* Results Display */}
-                        {proposal.isPublic && (
-                          <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-700/50">
-                            <div className="flex justify-between items-center mb-6">
-                              <span className="text-lg font-semibold text-white">Results</span>
-                              <Badge
-                                variant="secondary"
-                                className="bg-purple-500/20 text-purple-300 border-purple-500/30"
-                              >
-                                {proposal.yesCount + proposal.noCount} total votes
-                              </Badge>
-                            </div>
-                            <div className="space-y-4">
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"></div>
-                                    <span className="text-slate-200 font-medium">Yes</span>
-                                    <span className="text-slate-400">{proposal.yesCount} votes</span>
-                                  </div>
-                                  <div className="text-lg font-bold text-green-400">
-                                    {proposal.yesCount + proposal.noCount > 0
-                                      ? Math.round((proposal.yesCount / (proposal.yesCount + proposal.noCount)) * 100)
-                                      : 0}
-                                    %
-                                  </div>
-                                </div>
-                                <div className="w-full bg-slate-700 rounded-full h-2">
-                                  <div
-                                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
-                                    style={{
-                                      width: `${
-                                        proposal.yesCount + proposal.noCount > 0
-                                          ? (proposal.yesCount / (proposal.yesCount + proposal.noCount)) * 100
-                                          : 0
-                                      }%`,
-                                    }}
-                                  ></div>
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 bg-gradient-to-r from-red-500 to-rose-500 rounded-full"></div>
-                                    <span className="text-slate-200 font-medium">No</span>
-                                    <span className="text-slate-400">{proposal.noCount} votes</span>
-                                  </div>
-                                  <div className="text-lg font-bold text-red-400">
-                                    {proposal.yesCount + proposal.noCount > 0
-                                      ? Math.round((proposal.noCount / (proposal.yesCount + proposal.noCount)) * 100)
-                                      : 0}
-                                    %
-                                  </div>
-                                </div>
-                                <div className="w-full bg-slate-700 rounded-full h-2">
-                                  <div
-                                    className="bg-gradient-to-r from-red-500 to-rose-500 h-2 rounded-full transition-all duration-500"
-                                    style={{
-                                      width: `${
-                                        proposal.yesCount + proposal.noCount > 0
-                                          ? (proposal.noCount / (proposal.yesCount + proposal.noCount)) * 100
-                                          : 0
-                                      }%`,
-                                    }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Voting Status */}
-                        {hasUserVotedOnProposal(proposal.id) && (
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
-                            <Badge
-                              variant="secondary"
-                              className={`text-xs font-medium ${
-                                getUserVote(proposal.id)?.vote === "yes"
-                                  ? "bg-green-500/20 text-green-300 border-green-500/30"
-                                  : "bg-red-500/20 text-red-300 border-red-500/30"
-                              }`}
-                            >
-                              You voted: {getUserVote(proposal.id)?.vote?.toUpperCase()}
-                            </Badge>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-8">
-                  <Button
-                    variant="outline"
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                  >
-                    Previous
-                  </Button>
-                  
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        onClick={() => handlePageChange(page)}
-                        className={`w-10 h-10 ${
-                          currentPage === page
-                            ? "bg-purple-600 text-white border-purple-600"
-                            : "bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                        }`}
-                      >
-                        {page}
-                      </Button>
-                    ))}
-                  </div>
-                  
-                  <Button
-                    variant="outline"
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
-
-              {/* Page Info */}
-              {totalPages > 1 && (
-                <div className="text-center mt-4">
-                  <p className="text-slate-400 text-sm">
-                    Showing {indexOfFirstProposal + 1}-{Math.min(indexOfLastProposal, proposals.length)} of {proposals.length} proposals
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Create Tab */}
-            <TabsContent value="create" className="space-y-6">
-              <Card className="bg-slate-800/50 backdrop-blur-xl border-purple-500/20 shadow-2xl">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-3 text-white">
-                    <div className="p-2 bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-lg border border-purple-500/30">
-                      <Plus className="h-5 w-5 text-purple-400" />
-                    </div>
-                    Create New Proposal
-                  </CardTitle>
-                  <CardDescription className="text-slate-300">
-                    Submit a new proposal for anonymous community voting. All votes are cryptographically secured on the
-                    blockchain.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-3">
-                    <Label htmlFor="proposal-input" className="text-slate-200 font-medium">
-                      Proposal Description
-                    </Label>
-                    <Input
-                      id="proposal-input"
-                      placeholder="Enter your proposal description..."
-                      value={newProposal}
-                      onChange={(e) => setNewProposal(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && !creatingProposal && handleCreateProposal()}
-                      disabled={creatingProposal}
-                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-purple-500 focus:ring-purple-500/20 h-12"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleCreateProposal}
-                    disabled={!newProposal.trim() || creatingProposal}
-                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium px-8 py-3 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed h-12"
-                  >
-                    {creatingProposal ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Vote className="h-4 w-4 mr-2" />
-                        Create Proposal
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Analytics Tab */}
-            <TabsContent value="analytics" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-500/20 rounded-lg">
-                        <Vote className="h-5 w-5 text-purple-400" />
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-sm">Total Proposals</p>
-                        <p className="text-2xl font-bold text-white">{totalProposals}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-500/20 rounded-lg">
-                        <Users className="h-5 w-5 text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-sm">Total Votes</p>
-                        <p className="text-2xl font-bold text-white">{totalVotes}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-500/20 rounded-lg">
-                        <TrendingUp className="h-5 w-5 text-green-400" />
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-sm">Your Votes</p>
-                        <p className="text-2xl font-bold text-white">{userVoteCount}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50">
-                <CardHeader>
-                  <CardTitle className="text-white">Proposal Overview</CardTitle>
-                  <CardDescription className="text-slate-400">
-                    Summary of all proposals and their voting status
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {currentProposals.map((proposal) => (
-                      <div key={proposal.id} className="p-4 bg-slate-900/30 rounded-lg border border-slate-700/50">
-                        <div className="flex justify-between items-start mb-3">
-                          <h4 className="text-white font-medium text-sm leading-relaxed flex-1 pr-4">
-                            {proposal.description}
-                          </h4>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
-                              #{proposal.id}
-                            </Badge>
-                            {proposal.isPublic ? (
-                              <Badge variant="secondary" className="bg-green-500/20 text-green-300 text-xs">
-                                Public
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-slate-700/50 text-slate-400 text-xs">
-                                Private
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        {proposal.isPublic && (
-                          <div className="flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span className="text-slate-400">Yes: {proposal.yesCount}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                              <span className="text-slate-400">No: {proposal.noCount}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Pagination Controls for Analytics */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-2 mt-6">
-                      <Button
-                        variant="outline"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                      >
-                        Previous
-                      </Button>
-                      
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            onClick={() => handlePageChange(page)}
-                            className={`w-10 h-10 ${
-                              currentPage === page
-                                ? "bg-purple-600 text-white border-purple-600"
-                                : "bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                            }`}
-                          >
-                            {page}
-                          </Button>
-                        ))}
-                      </div>
-                      
-                      <Button
-                        variant="outline"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="bg-slate-700/30 border-slate-600 text-slate-300 hover:bg-slate-600/30 hover:border-purple-500/50"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* History Tab */}
-            <TabsContent value="history" className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white">Your Voting History</h2>
-                <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 border-slate-600">
-                  {userVotes.length} votes cast
-                </Badge>
-              </div>
-
-              {userVotes.length === 0 ? (
-                <Card className="bg-slate-800/30 backdrop-blur-xl border-slate-700/50">
-                  <CardContent className="py-16 text-center">
-                    <div className="p-4 bg-slate-700/30 rounded-full w-fit mx-auto mb-4">
-                      <History className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-400 text-lg">No votes cast yet.</p>
-                    <Button
-                      onClick={() => setActiveTab("vote")}
-                      className="mt-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                    >
-                      Start Voting
-                    </Button>
-                  </CardContent>
-                </Card>
+                <p className="py-16 text-zinc-500">No proposals yet. Tap + to create the first one.</p>
               ) : (
                 <div className="space-y-4">
-                  {userVotes
+                  {currentProposals.map((proposal) => {
+                    const total = proposal.yesCount + proposal.noCount
+                    const yesPct = total > 0 ? Math.round((proposal.yesCount / total) * 100) : 0
+                    const noPct = total > 0 ? Math.round((proposal.noCount / total) * 100) : 0
+                    const userVote = getUserVote(proposal.id)
+                    return (
+                      <div key={proposal.id} className="rounded-2xl border border-white/[0.07] bg-[#090b0a]/60 px-4 py-4 backdrop-blur-sm md:px-5 md:py-5">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="inline-block rounded-md bg-[#1c241e] px-1.5 py-0.5 text-[11px] text-[#b7d0b4]">#{proposal.id}</span>
+                            <h2 className="mt-2 break-words font-[family-name:var(--font-serif)] text-xl leading-7 md:text-[22px]">{proposal.description}</h2>
+                          </div>
+                          <span
+                            className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] ${
+                              proposal.isPublic ? "bg-red-950/50 text-red-300" : "bg-[#1c241e] text-[#8fbf88]"
+                            }`}
+                          >
+                            {proposal.isPublic ? <Lock className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-[#8fbf88]" />}
+                            {proposal.isPublic ? "Closed" : "Open"}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr] lg:gap-6">
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => handleVote(proposal.id, "yes")}
+                              disabled={voteDisabled(proposal)}
+                              className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border text-sm transition-transform active:scale-[0.97] ${
+                                userVote?.vote === "yes"
+                                  ? "border-[#8fbf88]/40 bg-[#1c241e] text-[#c5d9c2]"
+                                  : "border-white/10 bg-white/[0.03] text-zinc-300 hover:border-[#8fbf88]/30 disabled:opacity-40"
+                              }`}
+                            >
+                              {votingStates[proposal.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => handleVote(proposal.id, "no")}
+                              disabled={voteDisabled(proposal)}
+                              className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border text-sm transition-transform active:scale-[0.97] ${
+                                userVote?.vote === "no"
+                                  ? "border-red-400/30 bg-red-950/30 text-red-200"
+                                  : "border-red-900/40 bg-red-950/20 text-red-200/80 hover:border-red-400/30 disabled:opacity-40"
+                              }`}
+                            >
+                              {votingStates[proposal.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                              No
+                            </button>
+                          </div>
+
+                          <div className="border-t border-white/[0.06] pt-4 lg:border-t-0 lg:pt-0">
+                            <div className="mb-3 flex items-center justify-between text-xs text-zinc-500">
+                              <span className="flex items-center gap-1.5">
+                                <BarChart3 className="h-3.5 w-3.5" /> Results
+                              </span>
+                              <span>{proposal.isPublic ? `${total} vote${total === 1 ? "" : "s"}` : "Encrypted"}</span>
+                            </div>
+                            {proposal.isPublic ? (
+                              <div className="space-y-2 text-xs">
+                                <div className="flex items-center gap-3">
+                                  <span className="w-7 text-zinc-400">Yes</span>
+                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-full rounded-full bg-[#8fbf88] transition-all duration-500" style={{ width: `${yesPct}%` }} />
+                                  </div>
+                                  <span className="w-10 text-right text-[#8fbf88]">{yesPct}%</span>
+                                  <span className="w-4 text-right text-zinc-500">{proposal.yesCount}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="w-7 text-zinc-400">No</span>
+                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-full rounded-full bg-zinc-500 transition-all duration-500" style={{ width: `${noPct}%` }} />
+                                  </div>
+                                  <span className="w-10 text-right text-red-400">{noPct}%</span>
+                                  <span className="w-4 text-right text-zinc-500">{proposal.noCount}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-zinc-600">Tallies stay encrypted until the owner closes voting.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <p className="text-xs text-zinc-500">
+                            {userVote && userVote.vote !== "unknown" && userVote.vote !== "error" && (
+                              <>
+                                You voted <span className={userVote.vote === "yes" ? "text-[#8fbf88]" : "text-red-400"}>{userVote.vote}</span>
+                              </>
+                            )}
+                          </p>
+                          {proposalOwnership[proposal.id] && !proposal.isPublic && (
+                            <button
+                              onClick={() => handleMakePublic(proposal.id)}
+                              disabled={isLoading}
+                              className="rounded-lg border border-[#8fbf88]/30 px-3 py-1.5 text-xs text-[#c5d9c2] hover:bg-[#1c241e] disabled:opacity-40"
+                            >
+                              Publish &amp; close
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-2 text-sm">
+                  <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)} className="px-3 py-1 text-zinc-500 disabled:opacity-30">
+                    Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`h-8 w-8 rounded-lg ${currentPage === page ? "bg-[#1c241e] text-[#c5d9c2]" : "text-zinc-500"}`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)} className="px-3 py-1 text-zinc-500 disabled:opacity-30">
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          ) : activeTab === "create" ? (
+            <div className="max-w-xl">
+              <h1 className={TITLE}>Create Proposal</h1>
+              <p className="mt-2 text-sm text-zinc-500">Votes stay encrypted until you close the proposal.</p>
+              <input
+                value={newProposal}
+                onChange={(e) => setNewProposal(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !creatingProposal && handleCreateProposal()}
+                placeholder="Should we adopt proposal … ?"
+                disabled={creatingProposal}
+                className="mt-8 w-full border-b border-white/10 bg-transparent py-3 text-lg outline-none placeholder:text-zinc-600 focus:border-[#8fbf88]"
+              />
+              <button onClick={handleCreateProposal} disabled={!newProposal.trim() || creatingProposal} className={`mt-6 w-full md:w-auto ${PRIMARY_BTN}`}>
+                {creatingProposal ? "Creating..." : "Create Proposal"}
+              </button>
+            </div>
+          ) : activeTab === "analytics" ? (
+            <div>
+              <h1 className={TITLE}>Analytics</h1>
+              <div className="mt-8 grid grid-cols-3 gap-4 text-sm md:gap-8">
+                {[
+                  ["Proposals", proposals.length],
+                  ["Public votes", totalVotes],
+                  ["Your votes", userVotes.length],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-zinc-500">{label}</p>
+                    <p className="mt-1 font-[family-name:var(--font-serif)] text-3xl">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-10">
+                {proposals.map((proposal) => (
+                  <div key={proposal.id} className="flex items-center justify-between gap-4 border-b border-white/[0.06] py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm">{proposal.description}</p>
+                      <p className="mt-1 text-xs text-zinc-500">#{proposal.id} · {proposal.isPublic ? "Public" : "Private"}</p>
+                    </div>
+                    {proposal.isPublic && (
+                      <p className="shrink-0 text-xs text-zinc-500">
+                        Yes {proposal.yesCount} · No {proposal.noCount}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : activeTab === "history" ? (
+            <div>
+              <h1 className={TITLE}>My Votes</h1>
+              {userVotes.length === 0 ? (
+                <p className="mt-8 text-zinc-500">No votes yet.</p>
+              ) : (
+                <div className="mt-8">
+                  {[...userVotes]
                     .sort((a, b) => b.votedAt.getTime() - a.votedAt.getTime())
                     .map((vote) => {
                       const proposal = proposals.find((p) => p.id === vote.proposalId)
                       if (!proposal) return null
-
                       return (
-                        <Card
-                          key={`${vote.proposalId}-${vote.votedAt.getTime()}`}
-                          className="bg-slate-800/40 backdrop-blur-xl border-slate-700/50"
-                        >
-                          <CardContent className="p-6">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <h4 className="text-white font-medium mb-2 leading-relaxed">{proposal.description}</h4>
-                                <div className="flex items-center gap-4">
-                                  <Badge
-                                    variant="secondary"
-                                    className={`text-xs font-medium ${
-                                      vote.vote === "yes"
-                                        ? "bg-green-500/20 text-green-300 border-green-500/30"
-                                        : "bg-red-500/20 text-red-300 border-red-500/30"
-                                    }`}
-                                  >
-                                    Voted: {vote.vote.toUpperCase()}
-                                  </Badge>
-                                  <span className="text-slate-400 text-sm">{formatDate(vote.votedAt)}</span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-slate-400 text-sm mb-1">Proposal #{proposal.id}</div>
-                                {proposal.isPublic && (
-                                  <div className="flex items-center gap-3 text-sm">
-                                    <span className="text-green-400">Yes: {proposal.yesCount}</span>
-                                    <span className="text-red-400">No: {proposal.noCount}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <div key={`${vote.proposalId}-${vote.votedAt.getTime()}`} className="flex items-start justify-between gap-4 border-b border-white/[0.06] py-4">
+                          <div className="min-w-0">
+                            <p className="break-words">{proposal.description}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{formatDate(vote.votedAt)}</p>
+                          </div>
+                          <span className={`text-sm ${vote.vote === "yes" ? "text-[#8fbf88]" : "text-red-400"}`}>{vote.vote}</span>
+                        </div>
                       )
                     })}
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+            </div>
+          ) : (
+            // account tab (mobile only entry point)
+            <div className="max-w-md">
+              <h1 className={TITLE}>Account</h1>
+              <div className="mt-8 divide-y divide-white/[0.06] text-sm">
+                {[
+                  ["Wallet", account ? formatAddress(account) : "-"],
+                  ["Network", isCorrectNetwork ? "Sepolia" : "Wrong network"],
+                  ["CoFHE", cofheState],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between py-3">
+                    <span className="text-zinc-500">{label}</span>
+                    <span>{value}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 flex flex-col gap-3">
+                {!isCorrectNetwork && (
+                  <button onClick={switchToSepolia} className={PRIMARY_BTN}>
+                    Switch to Sepolia
+                  </button>
+                )}
+                <button
+                  onClick={refreshProposals}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 active:scale-[0.98]"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} /> Refresh proposals
+                </button>
+                <button
+                  onClick={disconnectWallet}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-red-900/40 bg-red-950/20 px-4 py-2.5 text-sm text-red-200 active:scale-[0.98]"
+                >
+                  <LogOut className="h-4 w-4" /> Disconnect
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <footer
+          className={`relative z-10 space-y-1.5 border-t border-white/[0.06] px-4 pt-6 text-center text-xs text-zinc-500 md:pb-6 ${
+            isConnected ? "pb-24" : "pb-6"
+          }`}
+        >
+          <p>© 2026 Confidential Voting. All rights reserved.</p>
+          <p>Powered by Fhenix CoFHE · Fully Homomorphic Encryption on Sepolia</p>
+          <p>
+            Built by Observer ·{" "}
+            <a href="https://x.com/0bserver_here" target="_blank" rel="noreferrer" className="text-zinc-300 hover:text-[#c5d9c2]">
+              @0bserver_here
+            </a>
+          </p>
+        </footer>
+      </div>
+
+      {/* mobile fixed bottom bar */}
+      {isConnected && <MobileNav active={activeTab} onChange={setActiveTab} />}
     </div>
   )
 }
