@@ -1,230 +1,490 @@
-# 🗳️ Confidential Voting
+# Confidential Voting 🗳️🔐
 
-Private yes/no voting on Ethereum Sepolia, built on [Fhenix CoFHE](https://cofhe-docs.fhenix.zone/get-started/introduction/what-is-cofhe) (Fully Homomorphic Encryption).
+A decentralized private voting dApp built on Ethereum using Fully Homomorphic Encryption (FHE) powered by [Fhenix CoFHE](https://cofhe-docs.fhenix.zone/get-started/introduction/what-is-cofhe). This platform lets people vote Yes or No on proposals while every ballot stays encrypted on-chain. Only the final tally is revealed, and only after the proposal owner closes voting.
 
-A vote is encrypted in the browser before it ever leaves the wallet. The smart contract never sees Yes or No in plaintext. The CoFHE coprocessor adds encrypted votes into encrypted tallies. Only after the proposal owner publishes and closes do Teecryptor-signed totals appear on-chain.
+## 🌟 Features
 
-This is FHE, not zero-knowledge proofs of the ballot. The chain stores ciphertext handles. Arithmetic on those handles happens off-chain in CoFHE and the encrypted result is written back.
+### For Voters
+- **Encrypted Ballots**: Your Yes/No is encrypted in your browser before it reaches the blockchain
+- **Private Voting**: Nobody, including the contract, explorers and the proposal owner, can read your vote
+- **Self-Decryption**: Re-read your own vote after a refresh with `decryptForView`, no transaction needed
+- **One Vote Per Address**: Double voting is blocked on-chain
+- **My Votes**: Track every proposal you voted on in one place
 
-## 📁 Repository
+### For Proposal Owners
+- **Create Proposals**: Open a new yes/no proposal with encrypted counters starting at zero
+- **Encrypted Tallies**: Yes/No totals are updated with FHE math and never decrypted mid-vote
+- **Publish & Close**: One action closes voting and publishes Teecryptor-signed totals on-chain
+- **Owner-Only Control**: Only the proposal creator can close and reveal
 
-| Folder | What it is |
-| --- | --- |
-| `fhevm-hardhat` | `ConfidentialVoting.sol`, Hardhat tests and Sepolia deploy |
-| `voting-app` | Next.js dApp: WalletConnect, `@cofhe/sdk`, vote / create / reveal UI |
+### Security & Privacy
+- 🔒 **End-to-End Encryption**: Votes are encrypted client-side with `@cofhe/sdk`
+- 🔐 **On-Chain Privacy**: The chain stores ciphertext handles (`euint8`), never plaintext votes
+- 🛡️ **No Data Leaks**: Running tallies stay encrypted until the owner publishes
+- ✅ **Verifiable Reveal**: Final totals are checked on-chain with `FHE.publishDecryptResult` against Teecryptor signatures
 
-🌐 Live network: Ethereum Sepolia. Contract address goes in `voting-app/.env` as `NEXT_PUBLIC_CONTRACT_ADDRESS`.
+### Experience
+- 📱 **Responsive UI**: Desktop sidebar plus a fixed mobile bottom tab bar
+- 👛 **WalletConnect**: Connect any wallet through Reown AppKit
+- 🧾 **Console Monitoring**: Live emoji logs for CoFHE init, encrypt steps and decrypt polling
 
 ## 🏗️ Architecture
 
-Four pieces talk to each other:
+```
+Confidential Voting/
+├── fhevm-hardhat/        # Smart contract & deployment
+│   ├── contracts/        # Solidity contract (ConfidentialVoting.sol)
+│   ├── deploy/           # Deployment script
+│   ├── test/             # Contract tests
+│   └── scripts/          # Helper scripts
+│
+└── voting-app/           # Next.js frontend
+    ├── app/              # App Router (layout, page, global styles)
+    ├── components/       # UI: wallet button, mobile nav, magnetic hover, shadcn/ui
+    ├── contexts/         # AppKit (WalletConnect) + Web3 context
+    ├── hooks/            # useFHE and UI hooks
+    └── lib/              # CoFHE service, contract address + ABI
+```
+
+### How the pieces talk
 
 ```
-Wallet + browser          ConfidentialVoting.sol         Fhenix CoFHE
-(@cofhe/sdk)              (Sepolia)                      (off-chain)
-─────────────────         ────────────────────           ────────────────
-encrypt Yes/No            stores ciphertext handles      coprocessor:
-  → ciphertext + ZK proof   ACL: who may decrypt           FHE add / eq / select
-decryptForView            FHE.allowThis / allowSender    Teecryptor:
-  (own ballot, no tx)     FHE.allowPublic                  TEE decrypt + seal / sign
-decryptForTx              publishDecryptResult
+Browser + wallet            ConfidentialVoting.sol          Fhenix CoFHE
+(@cofhe/sdk)                (Ethereum Sepolia)              (off-chain)
+─────────────────           ────────────────────            ───────────────────
+encrypt Yes/No              stores ciphertext handles       coprocessor:
+  → ciphertext + proof      ACL: who may decrypt              FHE add / eq / select
+decryptForView              FHE.allowThis / allowSender     Teecryptor:
+  (own ballot, no tx)       FHE.allowPublic                   TEE decrypt, seal or sign
+decryptForTx                FHE.publishDecryptResult
   (signed tally for tx)
 ```
 
-- 🧠 **`@cofhe/sdk`** runs in the browser. It encrypts inputs, talks to the coprocessor, and requests decrypts.
-- 📜 **`FHE.sol`** (`@fhenixprotocol/cofhe-contracts`) is the Solidity API. The contract only holds handles (`euint8`), never plaintext votes.
-- 🛰️ **Coprocessor** executes FHE ops (`add`, `eq`, `select`) on ciphertexts and returns a new handle.
-- 🔐 **Teecryptor** is the decrypt service. It checks the on-chain ACL, decrypts inside a TEE, then either seals the result to the caller’s ACP key (`decryptForView`) or returns plaintext plus an enclave signature (`decryptForTx`).
+- 🧠 **`@cofhe/sdk`** runs in the browser: encrypts inputs, manages permits, requests decrypts
+- 📜 **`FHE.sol`** (`@fhenixprotocol/cofhe-contracts`) is the Solidity API for encrypted handles
+- 🛰️ **Coprocessor** runs FHE operations on ciphertexts off-chain and returns new handles
+- 🔐 **Teecryptor** checks the on-chain ACL, decrypts inside a TEE, then seals to the caller (`decryptForView`) or signs the plaintext (`decryptForTx`)
 
-Vote encoding used everywhere: **`0` = Yes ✅, `1` = No ❌**.
+## 🚀 Quick Start
 
----
+### Prerequisites
+- Node.js >= 20
+- npm >= 7.0.0 (backend) and npm or pnpm (frontend)
+- A wallet with Sepolia ETH for gas
+- An Ethereum Sepolia RPC URL (the public node in `.env.example` works)
+- MetaMask or any WalletConnect-compatible wallet
+- A free [Reown](https://cloud.reown.com/) project ID for WalletConnect
 
-## 🔐 How a vote is encrypted
+### Installation & Deployment
 
-Triggered when the user clicks Yes or No. Implementation: `voting-app/lib/fheService.ts` → `encrypt()`, then `web3-context.tsx` → `contract.vote(...)`.
+#### 1. Backend Setup
 
-1. 🚀 **Connect CoFHE.** On first wallet connect the SDK loads (`createCofheClient` on `chains.sepolia`), then `client.connect(publicClient, walletClient)`.
-2. 🪪 **ACP (Access Control Permission).** `client.acp.getOrCreateSelfACP()` creates or loads an EIP-712 permit plus a sealing keypair (stored in `localStorage` under `cofhesdk-acps`). Teecryptor later seals decrypts to this key so only this browser can unseal them.
-3. 🔒 **Encrypt locally.** `encryptInputs([Encryptable.uint8(0|1)])` bound to the voting contract via `setConsumingContract(address)`. SDK steps:
+```bash
+# Navigate to the contract project
+cd fhevm-hardhat
 
-   | Step | What happens |
-   | --- | --- |
-   | 🔧 Init TFHE | Load the TFHE wasm runtime in the browser |
-   | 🔑 Fetch keys | Pull Fhenix FHE public keys for Sepolia |
-   | 📦 Pack | Encrypt the uint8 vote under those keys |
-   | 🧮 Prove | Build a ZK proof that the ciphertext is well-formed |
-   | 🛰️ Verify | CoFHE coprocessor verifies the ciphertext + proof |
+# Install dependencies
+npm install
 
-4. 📤 **Submit on-chain.** The dApp sends two things, not the vote:
-   - `encryptedValue` — ciphertext **handle** (`externalEuint8`)
-   - `proof` — input proof for the coprocessor
+# Create .env file
+cp .env.example .env
+# Add your PRIVATE_KEY and SEPOLIA_RPC_URL
 
-   Plaintext Yes/No never appears in the transaction calldata.
+# Compile contracts
+npm run compile
 
----
+# Run tests on the local CoFHE mock
+npm test
 
-## 🧾 What the contract does with an encrypted vote
+# Deploy to Sepolia
+npm run deploy:sepolia
+```
+
+Copy the deployed contract address. You need it for the frontend.
+
+#### 2. Frontend Setup
+
+```bash
+# Navigate to the frontend
+cd voting-app
+
+# Install dependencies
+npm install
+
+# Create .env file
+cp .env.example .env
+# Add NEXT_PUBLIC_CONTRACT_ADDRESS and NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+
+# Run the development server
+npm run dev
+```
+
+Open http://localhost:3000 and connect a wallet on Sepolia.
+
+### 📋 Complete Setup Sequence
+
+```bash
+# 1. Backend
+cd fhevm-hardhat
+npm install
+cp .env.example .env        # set PRIVATE_KEY and SEPOLIA_RPC_URL
+npm run compile
+npm run deploy:sepolia
+
+# 2. Copy the contract address from the deployment output
+
+# 3. Frontend
+cd ../voting-app
+npm install
+cp .env.example .env        # set NEXT_PUBLIC_CONTRACT_ADDRESS
+npm run dev
+```
+
+## 🛠️ Technology Stack
+
+### Backend
+- **Hardhat**: Ethereum development environment
+- **Solidity 0.8.28** (`evmVersion: cancun`): Smart contract language
+- **Fhenix CoFHE**: `@fhenixprotocol/cofhe-contracts` (`FHE.sol`) and `@cofhe/hardhat-plugin` for local mocks
+- **TypeScript**: Type-safe tests and deploy scripts
+- **Ethers.js v6**: Ethereum library
+- **TypeChain**: Typed contract bindings
+
+### Frontend
+- **Next.js 15 (App Router)** and **React 19**: UI framework
+- **TypeScript**: Type-safe development
+- **Tailwind CSS 3** and **shadcn/ui**: Styling and components
+- **`@cofhe/sdk` 0.8**: Client-side encryption, permits and decryption
+- **Reown AppKit** with the Ethers adapter: WalletConnect wallet connection
+- **Ethers.js v6** and **viem**: Contract calls and SDK adapters
+- **lucide-react**: Icons
+
+## 🔐 How It Works
+
+### Encryption Flow
+
+1. **Create Proposal**: `createProposal` stores the description and sets both counters to `FHE.asEuint8(0)`
+2. **Encrypt Vote**: The browser encrypts `0` (Yes) or `1` (No) with `@cofhe/sdk`
+3. **On-Chain Storage**: The contract stores the ciphertext handle as `euint8` and sets the public `hasVoted` flag
+4. **Encrypted Tally**: The contract adds to the Yes or No counter using `FHE.eq`, `FHE.select` and `FHE.add` on ciphertexts
+5. **Self-Decrypt**: The voter calls `getMyVote` and decrypts their own ballot with `decryptForView`
+6. **Publish & Close**: The owner calls `makeVoteCountsPublic`, then the dApp decrypts the totals and calls `revealVoteCounts`
+
+### Step 1: Encrypting a vote in the browser
+
+Implemented in `voting-app/lib/fheService.ts` → `encrypt()`.
+
+1. 🚀 **Initialize**: the SDK loads on dApp open (`createCofheClient` on `chains.sepolia`)
+2. 🔗 **Connect**: `client.connect(publicClient, walletClient)` once a wallet is connected
+3. 🪪 **ACP (Access Control Permission)**: `client.acp.getOrCreateSelfACP()` creates or loads an EIP-712 permit plus a sealing keypair, kept in `localStorage` under `cofhesdk-acps`
+4. 🔒 **Encrypt**: `encryptInputs([Encryptable.uint8(0 or 1)])` bound to the voting contract with `setConsumingContract(address)`
+
+| Step | What happens |
+| --- | --- |
+| 🔧 Init TFHE | Load the TFHE wasm runtime in the browser |
+| 🔑 Fetch keys | Pull the Fhenix FHE public keys for Sepolia |
+| 📦 Pack | Encrypt the uint8 vote under those keys |
+| 🧮 Prove | Build a ZK proof that the ciphertext is well-formed |
+| 🛰️ Verify | The CoFHE coprocessor verifies the ciphertext and proof |
+
+5. 📤 **Submit**: the dApp sends only two values to `vote(...)`:
+   - `encryptedValue`: the ciphertext handle (`externalEuint8`)
+   - `proof`: the input proof for the coprocessor
+
+Plaintext Yes/No never appears in the transaction calldata.
+
+### Step 2: What the contract does
 
 `ConfidentialVoting.vote(proposalId, encryptedVote, inputProof)`:
 
-1. ⛔ Rejects invalid proposals, double votes, and votes after close (`isPublic`).
-2. 🛰️ `FHE.asEuint8(encryptedVote, inputProof)` accepts the ciphertext if the proof checks out. Coprocessor is involved here.
-3. 🔒 Stores `encryptedVotes[proposalId][msg.sender] = v`.
-4. 👁️ Sets public `hasVoted[proposalId][msg.sender] = true`. **That an address voted is public. What it voted is not.**
+1. ⛔ Rejects invalid proposals, double votes and votes after close
+2. 🛰️ `FHE.asEuint8(encryptedVote, inputProof)` accepts the ciphertext once the proof checks out
+3. 🔒 Stores `encryptedVotes[proposalId][msg.sender]`
+4. 👁️ Sets `hasVoted[proposalId][msg.sender] = true` (that an address voted is public, what it voted is not)
 5. 🪪 Grants decrypt rights:
-   - `FHE.allowThis(v)` — the contract may keep using this ciphertext (needed for tally updates).
-   - `FHE.allowSender(v)` — the voter may later `decryptForView` their own ballot.
-6. ➕ Updates encrypted counters **without decrypting**:
+   - `FHE.allowThis(v)`: the contract can keep using the ciphertext for tally updates
+   - `FHE.allowSender(v)`: the voter can later decrypt their own ballot
+6. ➕ Updates the counters without ever decrypting:
 
 ```solidity
 p.yesCount = FHE.add(p.yesCount, FHE.select(FHE.eq(v, yes), one, zero));
 p.noCount  = FHE.add(p.noCount,  FHE.select(FHE.eq(v, no),  one, zero));
 ```
 
-`eq` / `select` / `add` all run on ciphertexts. If the vote equals Yes, encrypted `1` is added to `yesCount`; otherwise encrypted `0`. Same for No. Nodes, explorers, and the contract itself still cannot read the numbers.
+If the vote equals Yes, an encrypted `1` is added to `yesCount`, otherwise an encrypted `0`. The same applies to No. No node, explorer or the contract itself can read the numbers.
 
-`createProposal` starts both counters at `FHE.asEuint8(0)` and `FHE.allowThis` on each so the contract can keep adding.
+### Step 3: Reading your own vote after a refresh
 
----
+Your Yes/No is not stored in plaintext anywhere. After a refresh:
 
-## 🔓 Reading your own vote after a refresh
-
-The ballot is not stored in plaintext anywhere (not localStorage, not the UI cache for the actual vote). After a refresh:
-
-1. 👁️ `hasUserVoted(proposalId, account)` is a **public** bool.
-2. 🔒 If true, `getMyVote(proposalId)` returns the **encrypted handle** (only the voter, because of `FHE.allowSender`).
-3. 📬 The client calls `decryptForView(handle, FheTypes.Uint8)`. **No transaction.**
+1. 👁️ `hasUserVoted(proposalId, account)` returns a public boolean
+2. 🔒 `getMyVote(proposalId)` returns your encrypted handle
+3. 📬 The client calls `decryptForView(handle, FheTypes.Uint8)`, no transaction
 
 Teecryptor then:
 
-1. ✅ Checks on-chain ACL (`FHE.allowSender` for this address).
-2. 🧾 Checks the ciphertext commitment (handle still matches the stored ciphertext).
-3. 🛰️ Decrypts inside the TEE and **seals** the plaintext to the caller’s ACP public key.
-4. 🔑 The browser unseals with the local ACP private key and shows Yes or No.
+1. ✅ Checks the on-chain ACL (`FHE.allowSender` for your address)
+2. 🧾 Checks the ciphertext commitment
+3. 🛰️ Decrypts inside the TEE and seals the result to your ACP public key
+4. 🔑 Your browser unseals it with the local ACP private key
 
-Anyone else’s wallet cannot pass the ACL, so they cannot decrypt that handle.
+Any other wallet fails the ACL check and cannot decrypt your handle.
 
----
+### Step 4: Publish & Close (decrypting the tally)
 
-## 📣 Publish & close (decrypting the tally)
+Only the proposal owner can do this. The UI button is **Publish & close**.
 
-Only the proposal owner can close. UI button: **Publish & close**. Two transactions.
+**4a. `makeVoteCountsPublic`**
+- Requires `msg.sender` to be the proposal owner
+- `FHE.allowPublic` on `yesCount` and `noCount`
+- Sets `isPublic = true`, which closes voting. Individual ballots stay private, only the two totals become decryptable
 
-### 1. `makeVoteCountsPublic`
+**4b. `decryptForTx` then `revealVoteCounts`**
 
-- Requires `msg.sender == proposalOwner`.
-- `FHE.allowPublic(p.yesCount)` and `FHE.allowPublic(p.noCount)` — Teecryptor may now decrypt those two handles for anyone who asks.
-- Sets `isPublic = true`. Voting is closed. Individual ballots stay private; only the **totals** are marked public.
-
-### 2. `decryptForTx` + `revealVoteCounts`
-
-The dApp fetches the two tally handles with `getEncryptedVoteCount`, then for each:
-
-```
-client.decryptForTx(handle).withoutACP()
+```ts
+client.decryptForTx(handle).withoutACP()   // returns { decryptedValue, signature }
 ```
 
-Teecryptor:
+Teecryptor checks the public ACL, fetches the ciphertext, verifies the commitment, decrypts in the TEE and signs the result. Then:
 
-1. ✅ Checks public ACL (`FHE.allowPublic`).
-2. 🧾 Fetches ciphertext, verifies the commitment.
-3. ✍️ Decrypts in the TEE and returns `{ decryptedValue, signature }` (enclave signature over the result).
-
-Then the dApp calls:
-
-```
-revealVoteCounts(proposalId, yes, yesSig, no, noSig)
+```ts
+contract.revealVoteCounts(proposalId, yes, yesSig, no, noSig)
 ```
 
-On-chain `FHE.publishDecryptResult` verifies each Teecryptor signature against the handle. If valid, the contract writes `publicYesCount` / `publicNoCount` and `isRevealed = true`.
+On-chain `FHE.publishDecryptResult` verifies each signature against the handle. If valid, the contract stores `publicYesCount`, `publicNoCount` and sets `isRevealed = true`.
 
-From that point the UI reads plaintext totals from `getPublicVoteCounts`. Individual `encryptedVotes` are still handles and still only decryptable by the original voter.
-
----
-
-## 👁️ What is public vs private
+### Data Visibility
 
 | Data | Visibility |
 | --- | --- |
 | Proposal description, id, owner | 🟢 Public |
 | Whether an address has voted | 🟢 Public (`hasVoted`) |
-| Yes / No ballot | 🔒 Encrypted handle; only the voter can `decryptForView` |
-| Running yes / no totals | 🔒 Encrypted until Publish & close |
-| Final yes / no totals | 🟢 Public after `revealVoteCounts` |
+| Individual Yes/No ballot | 🔒 Encrypted, only the voter can decrypt |
+| Running Yes/No totals | 🔒 Encrypted until Publish & close |
+| Final Yes/No totals | 🟢 Public after `revealVoteCounts` |
 
----
+### FHE Types Used
+- `euint8`: Encrypted 8-bit integers (the vote and the Yes/No counters)
+- `externalEuint8`: Encrypted input handle accepted by `vote`
+- Vote encoding: `0` = Yes ✅, `1` = No ❌
 
-## 🗺️ Developer map
+### Contract Functions
 
-| Concern | Where |
+| Function | Who | Purpose |
+| --- | --- | --- |
+| `createProposal(description)` | Anyone | Create a proposal with zeroed encrypted counters |
+| `vote(id, encryptedVote, inputProof)` | Anyone, once per proposal | Store the encrypted ballot and update the tallies |
+| `getMyVote(id)` | Voter | Return your encrypted ballot handle |
+| `getEncryptedVoteCount(id)` | Anyone | Return the encrypted Yes/No handles |
+| `hasUserVoted(id, voter)` | Anyone | Whether an address has voted |
+| `isProposalOwner(id, user)` | Anyone | Ownership check |
+| `makeVoteCountsPublic(id)` | Owner | Allow public decryption and close voting |
+| `revealVoteCounts(id, yes, yesSig, no, noSig)` | Anyone with valid signatures | Publish verified plaintext totals |
+| `getPublicVoteCounts(id)` | Anyone | Read revealed totals and status flags |
+| `proposalCount()` | Anyone | Number of proposals |
+
+## 📁 Project Structure
+
+```
+Confidential Voting/
+├── README.md                              # This file
+│
+├── fhevm-hardhat/                         # Smart contract project
+│   ├── contracts/
+│   │   └── ConfidentialVoting.sol         # Encrypted voting contract
+│   ├── deploy/
+│   │   └── deploy-confidential-vote.ts    # Deployment script
+│   ├── test/
+│   │   └── ConfidentialVoting.test.ts     # Contract tests (CoFHE mock)
+│   ├── scripts/
+│   │   └── test-private-key.ts            # Check deployer key and balance
+│   ├── hardhat.config.ts                  # Networks, Solidity 0.8.28, CoFHE plugin
+│   ├── tsconfig.json                      # TypeScript config
+│   ├── package.json                       # Scripts: compile, test, deploy:*
+│   ├── package-lock.json
+│   ├── .env.example                       # PRIVATE_KEY, SEPOLIA_RPC_URL
+│   ├── .gitignore
+│   ├── LICENSE
+│   └── README.md                          # Contract-only notes
+│
+└── voting-app/                            # Next.js frontend
+    ├── app/
+    │   ├── layout.tsx                     # Fonts, viewport, providers
+    │   ├── page.tsx                       # Renders the voting UI
+    │   └── globals.css                    # Dark mint theme + grid background
+    ├── components/
+    │   ├── wallet-connect.tsx             # Connect / account pill
+    │   ├── mobile-nav.tsx                 # Fixed mobile bottom tab bar
+    │   ├── magnetic.tsx                   # Magnetic hover wrapper
+    │   ├── theme-provider.tsx
+    │   └── ui/                            # shadcn/ui primitives
+    │       ├── button.tsx, input.tsx, card.tsx, badge.tsx, label.tsx
+    │       ├── dialog.tsx, drawer.tsx, sheet.tsx, popover.tsx, tooltip.tsx
+    │       ├── select.tsx, tabs.tsx, table.tsx, progress.tsx, skeleton.tsx
+    │       ├── toast.tsx, toaster.tsx, sonner.tsx
+    │       └── ... (accordion, calendar, chart, form, sidebar and more)
+    ├── contexts/
+    │   ├── appkit.tsx                     # Reown AppKit (WalletConnect) setup
+    │   └── web3-context.tsx               # Wallet, contract, vote / reveal actions
+    ├── hooks/
+    │   ├── useFHE.ts                      # CoFHE lifecycle hook
+    │   ├── use-toast.ts
+    │   └── use-mobile.tsx
+    ├── lib/
+    │   ├── fheService.ts                  # CoFHE encrypt / decrypt service
+    │   ├── contracts.ts                   # Contract address + ABI export
+    │   ├── ConfidentialVotingABI.json     # Contract ABI
+    │   └── utils.ts                       # cn() class helper
+    ├── public/                            # Static assets (placeholders)
+    ├── styles/
+    │   └── globals.css
+    ├── voting-app.tsx                     # Main voting UI (desktop + mobile)
+    ├── next.config.mjs                    # Webpack, wasm, transpile packages
+    ├── tailwind.config.ts                 # Tailwind theme
+    ├── postcss.config.mjs
+    ├── components.json                    # shadcn/ui config
+    ├── tsconfig.json                      # Path alias @/*
+    ├── vercel.json                        # Vercel build settings
+    ├── package.json                       # Scripts: dev, build, start, lint
+    ├── pnpm-lock.yaml                     # Lockfile used by Vercel
+    ├── .env.example                       # NEXT_PUBLIC_* variables
+    └── .gitignore
+```
+
+### Where to look
+
+| Concern | File |
 | --- | --- |
-| Encrypt / decrypt / ACP | `voting-app/lib/fheService.ts` |
-| Contract calls, vote, reveal | `voting-app/contexts/web3-context.tsx` |
-| Solidity + FHE ops | `fhevm-hardhat/contracts/ConfidentialVoting.sol` |
-| Deploy | `fhevm-hardhat` → `npm run deploy:sepolia` |
-| WalletConnect | `voting-app/contexts/appkit.tsx` |
+| Encrypt, decrypt, ACP, console logs | `voting-app/lib/fheService.ts` |
+| Vote, create, publish & close flows | `voting-app/contexts/web3-context.tsx` |
+| WalletConnect setup | `voting-app/contexts/appkit.tsx` |
+| Voting UI (desktop and mobile) | `voting-app/voting-app.tsx` |
+| Solidity and FHE operations | `fhevm-hardhat/contracts/ConfidentialVoting.sol` |
 
-📚 Useful CoFHE docs:
+## 🧪 Testing
 
-- [What is CoFHE?](https://cofhe-docs.fhenix.zone/get-started/introduction/what-is-cofhe)
-- [Fhenix / CoFHE intro](https://cofhe-docs.fhenix.zone/cofhe/get-started/introduction/fhenix)
-- [Support](https://cofhe-docs.fhenix.zone/get-started/introduction/support-and-feedback)
-
----
-
-## ⚡ Quick start
-
-### 1️⃣ Contract
+### Backend Tests
 
 ```bash
 cd fhevm-hardhat
-npm install
-cp .env.example .env   # set PRIVATE_KEY and optionally SEPOLIA_RPC_URL
-npm run compile
-npm test
-npm run deploy:sepolia
+npm test                    # Run tests on the local CoFHE mock
+npm run test:private-key    # Verify your deployer key and balance
 ```
 
-Copy the deployed address into the frontend env.
+The suite covers:
+- Starts with zero proposals
+- Creates proposals and emits `ProposalCreated`
+- Casts encrypted votes and lets the voter decrypt their own vote
+- Rejects a second vote from the same address
+- Reveals encrypted tallies after the owner makes them public
+- Only lets the owner make results public
+- Reverts for an invalid proposal id
 
-### 2️⃣ Frontend
+### Frontend Development
 
 ```bash
 cd voting-app
-npm install
-cp .env.example .env
-npm run dev
+npm run dev                 # Development server
+npm run lint                # Lint
+npm run build               # Production build
+npm run start               # Serve the production build
 ```
 
-Open http://localhost:3000. Use a Sepolia wallet with test ETH.
+## 🌐 Network Configuration
 
-## 🔑 Environment
+- **Development**: Hardhat local network (chainId: 31337)
+- **Testnet**: Ethereum Sepolia (chainId: 11155111)
 
-`fhevm-hardhat/.env`
+CoFHE is also live on Arbitrum Sepolia and Base Sepolia, but this app is configured for Ethereum Sepolia only. Make sure your wallet is connected to Sepolia when using the dApp.
 
-| Variable | Purpose |
-| --- | --- |
-| `PRIVATE_KEY` | Deployer wallet (test key only) |
-| `SEPOLIA_RPC_URL` | Sepolia RPC |
+## 📝 Environment Variables
 
-`voting-app/.env`
+### Backend (`.env` in `fhevm-hardhat/`)
 
-| Variable | Purpose |
-| --- | --- |
-| `NEXT_PUBLIC_CONTRACT_ADDRESS` | Deployed `ConfidentialVoting` |
-| `NEXT_PUBLIC_NETWORK` | `sepolia` |
-| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Sepolia RPC |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Reown / WalletConnect project ID |
+```env
+PRIVATE_KEY=your_private_key
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+```
 
-## 🧰 Stack
+### Frontend (`.env` in `voting-app/`)
 
-- Solidity `^0.8.25` + `@fhenixprotocol/cofhe-contracts` (`FHE.sol`, `euint8`)
-- `@cofhe/sdk` 0.8 — encrypt, ACP, `decryptForView`, `decryptForTx`
-- Next.js 15, React 19, Tailwind, ethers v6
-- Reown AppKit (WalletConnect)
+```env
+NEXT_PUBLIC_CONTRACT_ADDRESS=0xYourDeployedContractAddress
+NEXT_PUBLIC_NETWORK=sepolia
+NEXT_PUBLIC_SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_reown_project_id
+```
 
----
+⚠️ Never commit a funded private key. Use a throwaway test wallet for `PRIVATE_KEY`.
+
+## ☁️ Deploying the Frontend (Vercel)
+
+1. Import the repo in Vercel and set the **Root Directory** to `voting-app`
+2. Add the four `NEXT_PUBLIC_*` variables above in Project Settings
+3. Keep Next.js on a patched version. Vercel blocks new deployments of vulnerable Next.js releases
+4. Commit `pnpm-lock.yaml` together with `package.json` changes, because Vercel installs with a frozen lockfile
+
+## 🔒 Security Considerations
+
+- **Private Keys**: Never share or commit private keys. Deploy with a test wallet only
+- **Environment Variables**: Keep backend `.env` files out of version control
+- **Network**: Currently deployed on Sepolia testnet (not mainnet)
+- **FHE Security**: All sensitive operations go through Fhenix CoFHE encryption
+- **Wallet Security**: Users control their own wallets, the app stores no keys
+- **Public Metadata**: Whether an address voted, and when, is visible on-chain. Only the choice is private
+- **ACP Storage**: The sealing keypair lives in the browser `localStorage`. Clearing it means signing a new permit to decrypt your ballot again
+- **Tally Limits**: Counters are `uint8`, so a proposal supports up to 255 votes per side
+
+## 🐛 Troubleshooting
+
+### Backend Issues
+- **Insufficient funds**: Get Sepolia ETH from a faucet
+- **Deployment fails**: Check `SEPOLIA_RPC_URL` and `PRIVATE_KEY` in `.env`, then run `npm run test:private-key`
+- **Tests fail to start**: Run `npm install` again so `@cofhe/hardhat-plugin` is present
+
+### Frontend Issues
+- **Contract not found**: Verify `NEXT_PUBLIC_CONTRACT_ADDRESS` in `.env` and that your wallet is on Sepolia
+- **CoFHE not initializing**: Open the browser console and look for the `🚀 Initializing CoFHE SDK...` and `✅ CoFHE connected + ACP ready` logs
+- **Encryption or decryption is slow**: The Teecryptor poll logs show progress (`⏳ ... attempt N`), wait for them to finish
+- **Wallet modal does not open**: Check `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
+- **Build error `Please call createAppKit before using useAppKit`**: AppKit must be created at module load, see `contexts/appkit.tsx`
+- **Vercel `ERR_PNPM_OUTDATED_LOCKFILE`**: Regenerate `pnpm-lock.yaml` and commit it with `package.json`
+
+## 📚 Documentation
+
+- [What is CoFHE?](https://cofhe-docs.fhenix.zone/get-started/introduction/what-is-cofhe) - CoFHE overview
+- [Fhenix CoFHE Docs](https://cofhe-docs.fhenix.zone/) - Full documentation
+- [Support & Feedback](https://cofhe-docs.fhenix.zone/get-started/introduction/support-and-feedback) - Help channels
+- [Hardhat Docs](https://hardhat.org/docs) - Hardhat documentation
+- [Next.js Docs](https://nextjs.org/docs) - Next.js documentation
+- [Reown AppKit Docs](https://docs.reown.com/appkit/overview) - WalletConnect integration
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly (`npm test` in `fhevm-hardhat`, `npm run build` in `voting-app`)
+5. Submit a pull request
+
+## 📄 License
+
+See the `LICENSE` file in `fhevm-hardhat/`. Individual packages (`@cofhe/sdk`, `@fhenixprotocol/cofhe-contracts`, Reown AppKit and others) carry their own licenses.
+
+## 🙏 Acknowledgments
+
+- **Fhenix**: For CoFHE and the FHE tooling
+- **Hardhat**: For the development framework
+- **Reown**: For AppKit and WalletConnect
+- **shadcn/ui** and **Tailwind CSS**: For the UI foundation
+
+## 📞 Support
+
+For issues or questions:
+- Check the troubleshooting section above
+- Review the browser console for CoFHE logs
+- Check deployment logs for backend issues
+- Ask in the Fhenix community channels below
 
 ## 🟣 Fhenix
 
@@ -242,3 +502,7 @@ Open http://localhost:3000. Use a Sepolia wallet with test ETH.
 ## 👤 Built by
 
 Observer — [x.com/0bserver_here](https://x.com/0bserver_here)
+
+---
+
+Built with 🔐 Fhenix CoFHE | Deployed on Ethereum Sepolia Testnet
