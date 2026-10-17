@@ -32,8 +32,10 @@ const metadata = {
   icons: ["https://avatars.githubusercontent.com/u/179229932"],
 }
 
-if (typeof window !== "undefined" && !(window as any).__cvAppKit) {
-  ;(window as any).__cvAppKit = createAppKit({
+// runs on server too so useAppKit works during prerender; globalThis guard survives HMR
+const globalRef = globalThis as { __cvAppKit?: unknown }
+if (!globalRef.__cvAppKit) {
+  globalRef.__cvAppKit = createAppKit({
     adapters: [new EthersAdapter()],
     projectId,
     networks: [sepolia],
