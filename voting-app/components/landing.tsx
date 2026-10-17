@@ -32,7 +32,7 @@ export function Landing() {
     <div className="relative flex min-h-[100dvh] flex-col bg-[#090b0a] text-[#e7ece8]">
       <MountainBg />
 
-      <header className="relative z-10 flex items-center justify-between border-b border-white/[0.06] px-4 py-4 md:px-10">
+      <header className="relative z-10 flex items-center justify-between border-b border-white/[0.06] px-4 py-4 md:px-8">
         <div className="flex items-center gap-2.5">
           <Shield className="h-5 w-5 text-[#b7d0b4]" />
           <span className={`${SERIF} text-xl`}>Confidential Voting</span>
@@ -47,13 +47,13 @@ export function Landing() {
       </header>
 
       <main className="relative z-10 flex-1">
-        <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-14 md:px-10 lg:grid-cols-[1.1fr_1fr] lg:py-24">
+        <section className="grid items-center gap-8 px-4 py-6 md:px-8 md:py-8 lg:grid-cols-[1.1fr_1fr] lg:gap-12">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-[10px] tracking-[0.18em] text-zinc-400">
               <span className="h-1.5 w-1.5 rounded-full bg-[#8fbf88]" />
               POWERED BY FHENIX COFHE
             </span>
-            <h1 className={`${SERIF} mt-6 text-[44px] leading-[1.05] md:text-6xl lg:text-[68px]`}>
+            <h1 className={`${SERIF} mt-6 text-[44px] leading-[1.05] md:text-6xl lg:text-[68px] xl:text-[80px]`}>
               Vote freely.
               <br />
               <span className="text-[#8fbf88]">Reveal only the result.</span>
@@ -107,9 +107,9 @@ export function Landing() {
         </section>
 
         <section id="how" className="border-t border-white/[0.06]">
-          <div className="mx-auto grid max-w-6xl divide-y divide-white/[0.06] px-4 md:px-10 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+          <div className="grid divide-y divide-white/[0.06] px-4 md:px-8 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
             {FEATURES.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="flex gap-4 py-8 lg:px-8 lg:first:pl-0 lg:last:pr-0">
+              <div key={title} className="flex gap-4 py-5 lg:px-8 lg:first:pl-0 lg:last:pr-0">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#141816] text-[#b7d0b4]">
                   <Icon className="h-5 w-5" />
                 </span>
