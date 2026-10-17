@@ -1,8 +1,4 @@
-// Contract configuration for Confidential Voting
-// Similar to zpool-fe structure
-
-// Contract addresses (Sepolia deployment)
-export const CONFIDENTIAL_VOTING_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x6edCAd4CfbAbd1b94fdE123297D0B981A1477807";
+export const CONFIDENTIAL_VOTING_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xFB78fFa3f5D6192Be4b23B0efe8637fD629455FD";
 
 // Import ABI from compiled contract
 import contractABI from './ConfidentialVotingABI.json';

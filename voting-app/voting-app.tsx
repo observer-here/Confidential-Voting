@@ -76,10 +76,7 @@ export default function Component() {
       )
       
       if (proposalsToCheck.length > 0) {
-        console.log('Checking voting status for proposals:', proposalsToCheck.map(p => p.id))
         checkVotingStatus()
-      } else {
-        console.log('All proposals already have local vote data')
       }
 
       // Check ownership for all proposals
@@ -95,14 +92,6 @@ export default function Component() {
       setProposalOwnership({})
     }
   }, [isConnected])
-
-  // Reload when account changes (handled by context, but ensure UI is updated)
-  useEffect(() => {
-    if (isConnected && account) {
-      console.log('Account connected:', account)
-      // The context will handle reloading, but we can add additional UI updates here if needed
-    }
-  }, [account, isConnected])
 
   // Reset pagination when proposals change
   useEffect(() => {
@@ -146,8 +135,6 @@ export default function Component() {
       }
 
       if (votedProposals.length > 0) {
-        console.log('User has voted on proposals:', votedProposals)
-        
         // Check if we already have these votes in local state
         const existingVotes = userVotes.filter(vote => votedProposals.includes(vote.proposalId))
         const newProposals = votedProposals.filter(id => !userVotes.some(vote => vote.proposalId === id))
@@ -156,9 +143,6 @@ export default function Component() {
         votes.push(...existingVotes)
         
         if (newProposals.length > 0) {
-          console.log('Need to decrypt votes for proposals:', newProposals)
-          
-          // Get encrypted votes for each proposal individually (old pattern)
           for (const proposalId of newProposals) {
             try {
               const encryptedVote = await getMyVote(proposalId)
@@ -172,12 +156,10 @@ export default function Component() {
                   vote: voteValue,
                   votedAt: new Date(),
                 })
-                console.log(`Added decrypted vote for proposal ${proposalId}:`, voteValue)
               } else {
-                console.log(`FHE not initialized, using placeholder for proposal ${proposalId}`)
                 votes.push({
                   proposalId: proposalId,
-                  vote: "unknown", // Placeholder
+                  vote: "unknown",
                   votedAt: new Date(),
                 })
               }
@@ -228,9 +210,6 @@ export default function Component() {
     setVotingStates((prev) => ({ ...prev, [proposalId]: "Preparing..." }))
     
     try {
-      console.log('UI handleVote called:', { proposalId, voteValue, booleanValue: voteValue === "yes" })
-      
-      // Update loading text to show encryption step
       setVotingStates((prev) => ({ ...prev, [proposalId]: "Encrypting..." }))
 
       await vote(proposalId, voteValue === "yes")
@@ -248,8 +227,6 @@ export default function Component() {
         votedAt: new Date(),
       }
       setUserVotes((prev) => [...prev.filter((v) => v.proposalId !== proposalId), newVote])
-
-      console.log('Vote completed successfully:', { proposalId, voteValue })
 
       toast({
         title: "Vote Submitted",
@@ -374,7 +351,7 @@ export default function Component() {
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-slate-800/90 border border-slate-700/50 rounded-xl p-8 text-center">
             <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Initializing FHE</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">Initializing CoFHE</h3>
             <p className="text-slate-400">Loading confidential voting system...</p>
           </div>
         </div>
@@ -403,13 +380,13 @@ export default function Component() {
               {fheStatus.loading && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full">
                   <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-                  <span className="text-xs text-blue-400">Loading FHE...</span>
+                  <span className="text-xs text-blue-400">Loading CoFHE...</span>
                 </div>
               )}
               {fheStatus.error && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-full">
                   <XCircle className="h-3 w-3 text-red-400" />
-                  <span className="text-xs text-red-400">FHE Error</span>
+                  <span className="text-xs text-red-400">CoFHE Error</span>
                 </div>
               )}
               <div className="hidden sm:flex items-center gap-6 text-sm text-slate-400">
@@ -622,7 +599,7 @@ export default function Component() {
                             ) : (
                               <CheckCircle className="h-4 w-4 mr-2" />
                             )}
-                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading FHE..." : proposal.isPublic ? "Voting Closed" : "Vote Yes")}
+                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading CoFHE..." : proposal.isPublic ? "Voting Closed" : "Vote Yes")}
                           </Button>
                           <Button
                             variant={getUserVote(proposal.id)?.vote === "no" ? "destructive" : "outline"}
@@ -650,7 +627,7 @@ export default function Component() {
                             ) : (
                               <XCircle className="h-4 w-4 mr-2" />
                             )}
-                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading FHE..." : proposal.isPublic ? "Voting Closed" : "Vote No")}
+                            {votingStates[proposal.id] || (fheStatus.loading ? "Loading CoFHE..." : proposal.isPublic ? "Voting Closed" : "Vote No")}
                           </Button>
                         </div>
 

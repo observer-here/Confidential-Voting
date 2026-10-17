@@ -21,8 +21,10 @@ export function WalletConnect() {
         return "Goerli"
       case 11155111:
         return "Sepolia"
-      case 8009:
-        return "Zama Devnet"
+      case 421614:
+        return "Arbitrum Sepolia"
+      case 84532:
+        return "Base Sepolia"
       default:
         return `Chain ${chainId}`
     }
